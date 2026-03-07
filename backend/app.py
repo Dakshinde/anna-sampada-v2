@@ -95,7 +95,7 @@ try:
         raise ValueError("GEMINI_API_KEY not found in .env file.")
     
     client = genai.Client(api_key=api_key)
-    MODEL_NAME = "gemini-2.5-flash"
+    MODEL_NAME = "gemini-2.0-flash"
     print("✅ Gemini API configured successfully via Client (new SDK).")
 
 except Exception as e:
