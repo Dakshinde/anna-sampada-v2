@@ -30,20 +30,15 @@ app = Flask(__name__)
 # This is more secure because it only trusts your specific domains
 CORS(app, resources={r"/api/*": {
     "origins": [
-        "http://localhost:5173", 
-        "https://annasampada.vercel.app"
-    ]
+        "http://localhost:5173",          # For local testing
+        "https://annasampada.vercel.app" # For your live Vercel site
+    ],
+    "methods": ["GET", "POST", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization"],
+    "supports_credentials": True
 }}, supports_credentials=True)
 
 
-# Add this small decorator to handle the "Preflight" requests
-@app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
 # --- 2. INITIALIZE SERVICES (FIREBASE & GEMINI) ---
 
 
