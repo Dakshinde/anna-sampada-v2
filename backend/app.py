@@ -28,7 +28,14 @@ warnings.filterwarnings('ignore')
 app = Flask(__name__)
 
 # Replace CORS(app) with this:
-CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+# This is more secure because it only trusts your specific domains
+CORS(app, resources={r"/api/*": {
+    "origins": [
+        "http://localhost:5173", 
+        "https://annasampada.vercel.app"
+    ]
+}}, supports_credentials=True)
+
 
 # Add this small decorator to handle the "Preflight" requests
 @app.after_request
