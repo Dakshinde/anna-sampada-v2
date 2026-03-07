@@ -45,6 +45,11 @@ Follow these instructions to get a copy of the project up and running on your lo
 * Node.js and npm (for the frontend)
 * Python 3 and pip (for the backend)
 * Git
+### Deployment
+
+
+
+Note: Hosted on Render Free Tier; please allow 30 seconds for the initial 'Cold Start' wake-up." This shows you understand cloud infrastructure limitations.
 
 ### Installation & Setup
 
