@@ -178,8 +178,15 @@ def notify_ngo():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    # Use the port Render provides via environment variables
+@app.route('/')
+def health_check():
+    return jsonify({"status": "online", "message": "Anna Sampada API is active"}), 200
+
+@app.route('/')
+def home():
+    return "Anna Sampada API is Live!"
+
+if __name__ == "__main__":
+    # Render provides the PORT environment variable
     port = int(os.environ.get("PORT", 10000))
-    # In production, we set debug=False and host='0.0.0.0'
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port)
