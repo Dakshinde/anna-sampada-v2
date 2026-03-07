@@ -30,6 +30,8 @@ import {
   Droplet, // <-- THIS WAS MISSING
 
 } from 'lucide-react';
+import { apiRequest } from '../../services/api.service'; // Use the central service
+
 
 
 
@@ -467,17 +469,16 @@ const RiceForm = ({ handleBack, setResult, setLoading, setApiError, stepVariants
    }, [formData, errors]);
 
 
-  // --- API Call ---
-  const handlePredict = async () => {
+
+const handlePredict = async () => {
     setApiError(null);
     setResult(null);
 
-    // Final validation check before submitting, pass true to enforce required
+    // Ensure validation passes before hitting the cloud backend
     if (!validateForm(true)) {
         console.log("Final validation failed (Rice)", errors);
         return;
     }
-
 
     setLoading(true);
     try {
@@ -490,29 +491,27 @@ const RiceForm = ({ handleBack, setResult, setLoading, setApiError, stepVariants
         cooling_method: formData.coolingMethod,
       };
 
-      console.log("Sending Rice Payload:", payload); // Debug payload
+      console.log("Sending Rice Payload to Render:", payload); // Debugging
 
-      // Ensure this endpoint matches your Flask setup for Rice
-      const res = await fetch('http://localhost:5000/api/predict', {
+      // --- [CENTRALIZED API CONNECTION] ---
+      // This automatically swaps from localhost:5000 to Render
+      const data = await apiRequest('/api/predict', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-           console.error("API Error Response (Rice):", data);
-           throw new Error(data.error || `Request failed with status ${res.status}`);
-      }
       setResult(data);
 
     } catch (err) {
       console.error("Fetch Error (Rice):", err);
-      setApiError(err.message.includes('Failed to fetch') ? 'Cannot connect to the prediction service.' : err.message);
+      // Clean error messaging for the high-end UI
+      setApiError(err.message.includes('Failed to fetch') 
+        ? 'Cannot connect to the prediction service. Check if Render is awake.' 
+        : err.message);
     } finally {
       setLoading(false);
     }
-  };
+};
 
   // Determine which fields should be enabled based on previous valid inputs
   const hoursSinceCookingValid = formData.hoursSinceCooking.trim() !== '' && !errors.hoursSinceCooking;
@@ -772,57 +771,49 @@ const MilkForm = ({ handleBack, setResult, setLoading, setApiError, foodType, st
 
 
 
-  // --- API Call ---
-  const handlePredict = async () => {
+const handlePredict = async () => {
     setApiError(null);
     setResult(null);
 
     // Final validation check before submitting
-    if (!validateForm(true)) { // Pass true to enforce required checks
-         console.log("Final milk validation failed", errors);
+    if (!validateForm(true)) {
+        console.log("Final milk validation failed", errors);
         return;
     }
 
     setLoading(true);
     try {
-      // Construct payload expected by the backend
       const payload = {
-        // Send the actual foodType string (e.g., "Raw/Loose")
-        'milk_type': foodType,
-        'days_since_open_or_purchase': parseFloat(formData.days_since_open_or_purchase),
-        // Send boolean true/false for was_boiled
-        'was_boiled': showBoiledQuestion ? (formData.was_boiled === 'Yes') : false, // Default to false if not shown
-        'storage_location': formData.storage_location,
-        'cumulative_hours_at_room_temp': parseFloat(formData.cumulative_hours_at_room_temp),
-        // Send the selected string labels directly (backend handles mapping)
-        'observed_smell': formData.observed_smell,
-        'observed_consistency': formData.observed_consistency,
+        milk_type: foodType,
+        days_since_open_or_purchase: parseFloat(formData.days_since_open_or_purchase),
+        was_boiled: showBoiledQuestion ? (formData.was_boiled === 'Yes') : false,
+        storage_location: formData.storage_location,
+        cumulative_hours_at_room_temp: parseFloat(formData.cumulative_hours_at_room_temp),
+        observed_smell: formData.observed_smell,
+        observed_consistency: formData.observed_consistency,
       };
 
-      console.log("Sending Milk Payload:", payload); // Debug: Check payload before sending
+      console.log("Sending Milk Payload to Render:", payload); // Debugging
 
-      // Ensure this matches your backend route for milk
-      const res = await fetch('http://localhost:5000/api/predict_milk', {
+      // --- [CENTRALIZED API CONNECTION] ---
+      // This automatically swaps between localhost and your Render URL
+      const data = await apiRequest('/api/predict_milk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-           console.error("API Error Response (Milk):", data); // Log the actual error from backend
-           throw new Error(data.error || `Request failed with status ${res.status}`);
-      }
       setResult(data);
 
     } catch (err) {
-      console.error("Fetch Error (Milk):", err); // Log fetch/network errors
-      // Provide a user-friendly message for network issues
-      setApiError(err.message.includes('Failed to fetch') ? 'Cannot connect to the prediction service. Please ensure it is running.' : err.message);
+      console.error("Fetch Error (Milk):", err);
+      // User-friendly messaging for cloud or network issues
+      setApiError(err.message.includes('Failed to fetch') 
+        ? 'Cannot connect to the prediction service. Please ensure Render is awake.' 
+        : err.message);
     } finally {
       setLoading(false);
     }
-  };
+};
 
   // Determine which fields should be enabled (Serial Flow)
    const daysValid = formData.days_since_open_or_purchase.trim() !== '' && !errors.days_since_open_or_purchase;
@@ -1067,49 +1058,27 @@ const PaneerForm = ({ handleBack, setResult, setLoading, setApiError, foodType, 
     setApiError(null);
     setResult(null);
 
-    if (!validateForm(true)) { // Final validation on submit
-        console.log("Final paneer validation failed", errors);
-        return;
-    }
+    if (!validateForm(formData)) return;
 
     setLoading(true);
     try {
-      // Construct payload expected by the backend
-      const payload = {
-        // Send the effective foodType ('Cooked...' or 'Raw...')
-        'is_cooked': foodType,
-        'days_since_purchase_or_cooked': parseFloat(formData.days_since_purchase_or_cooked),
-        'paneer_type': formData.paneer_type,
-        'storage_location': formData.storage_location,
-        // Only include storage_container_raw if it's relevant and has a value
-        'storage_container_raw': isRawPaneer ? formData.storage_container_raw : 'Not Applicable', // Send NA if cooked
-        'observed_smell': formData.observed_smell,
-        'texture_surface': formData.texture_surface,
-      };
+      const payload = { ...formData };
+      if (!isRawPaneer) payload.storage_container_raw = "Not Applicable";
 
-      console.log("Sending Paneer Payload:", payload); // Debug payload
-
-      // Ensure this matches your backend route for paneer
-      const res = await fetch('http://localhost:5000/api/predict/paneer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      // Clean, centralized call
+      const data = await apiRequest("/api/predict/paneer", {
+        method: "POST",
         body: JSON.stringify(payload),
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-          console.error("API Error Response (Paneer):", data);
-          throw new Error(data.error || `Request failed with status ${res.status}`);
-      }
+      
       setResult(data);
-
     } catch (err) {
-       console.error("Fetch Error (Paneer):", err);
-       setApiError(err.message.includes('Failed to fetch') ? 'Cannot connect to the prediction service.' : err.message);
+      setApiError(err.message);
     } finally {
       setLoading(false);
     }
-  };
+    }
+  
 
   // Determine which fields should be enabled (Serial Flow)
    const daysValid = formData.days_since_purchase_or_cooked.trim() !== '' && !errors.days_since_purchase_or_cooked;
