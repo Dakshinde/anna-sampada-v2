@@ -1,15 +1,19 @@
 // src/services/chatbot.service.js
-async function sendToGemini({ userMessage, history = [], mode = 'Veg' }) {
-  // Payload keys MUST match your app.py /api/chat endpoint
+
+async function sendToGemini({ userMessage, history = [], mode = 'Veg', userId = null }) {
+  // 1. DYNAMIC URL: Pick Render in production, localhost in development
+  const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+  // 2. PAYLOAD: Ensure userId is included for your Firebase logging logic
   const payload = {
     message: userMessage,
     history: history,
-    mode: mode
+    mode: mode,
+    userId: userId // Critical for your log_chat_to_firestore function
   };
 
   try {
-    // URL MUST match your app.py endpoint
-    const res = await fetch('http://127.0.0.1:5000/api/chat', {
+    const res = await fetch(`${BASE_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -21,19 +25,18 @@ async function sendToGemini({ userMessage, history = [], mode = 'Veg' }) {
     }
 
     const data = await res.json();
-    return data; // This will be the full { text, structured } object
+    return data; // returns { text, structured }
 
   } catch (e) {
     console.error('Chat service error:', e);
     return {
-      text: `A network error occurred: ${e.message}`,
+      text: `Unable to connect to Anna's brain: ${e.message}`,
       structured: {
-        replyText: `A network error occurred: ${e.message}`,
-        safetyTips: ['Please check that the backend server is running.']
+        replyText: `Network error: ${e.message}`,
+        safetyTips: ['Check if the backend server on Render is awake.']
       }
     };
   }
 }
 
-// Export it as a named 'chatbotService' to match the hook
 export const chatbotService = { sendToGemini };
