@@ -1,0 +1,20 @@
+# Use Python 3.12 slim version to keep the size small
+FROM python:3.12-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the requirements file first to install dependencies
+COPY requirements.txt .
+
+# Install all necessary Python libraries
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy all your backend code into the container
+COPY . .
+
+# Expose port 10000 for Render
+EXPOSE 10000
+
+# Start the server using gunicorn
+CMD ["gunicorn", "-b", "0.0.0.0:10000", "app:app"]
