@@ -1,14 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path' // You might need to install @types/node
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      // This allows you to use '@' instead of '../../..'
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   server: {
     port: 5173,
     proxy: {
-      // This redirects all frontend calls starting with /api 
-      // to your Flask backend on port 5000
+      // Local development proxy
       '/api': {
         target: 'http://127.0.0.1:5000',
         changeOrigin: true,

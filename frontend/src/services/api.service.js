@@ -1,72 +1,30 @@
-import { API_BASE_URL, getAuthHeader } from '../config/api';
+// src/services/api.js
 
-class ApiService {
-  async request(endpoint, options = {}) {
-    const url = `${API_BASE_URL}${endpoint}`;
-    const config = {
+// Vite environment variable with fallback for local dev
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+export const apiRequest = async (endpoint, options = {}) => {
+  const url = `${BASE_URL}${endpoint}`;
+  
+  const defaultHeaders = {
+    'Content-Type': 'application/json',
+  };
+
+  try {
+    const response = await fetch(url, {
       ...options,
       headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeader(),
+        ...defaultHeaders,
         ...options.headers,
       },
-    };
-
-    try {
-      const response = await fetch(url, config);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Something went wrong');
-      }
-
-      return data;
-    } catch (error) {
-      console.error('API Error:', error);
-      throw error;
-    }
-  }
-
-  get(endpoint) {
-    return this.request(endpoint, { method: 'GET' });
-  }
-
-  post(endpoint, data) {
-    return this.request(endpoint, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  put(endpoint, data) {
-    return this.request(endpoint, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  }
-
-  delete(endpoint) {
-    return this.request(endpoint, { method: 'DELETE' });
-  }
-
-  async uploadFile(endpoint, file) {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const url = `${API_BASE_URL}${endpoint}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: formData,
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Upload failed');
-    }
-
-    return response.json();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'API Request failed');
+    
+    return data;
+  } catch (error) {
+    console.error(`API Error at ${endpoint}:`, error);
+    throw error;
   }
-}
-
-export default new ApiService();
+};

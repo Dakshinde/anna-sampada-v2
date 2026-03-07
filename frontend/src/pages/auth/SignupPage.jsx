@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import ThemeToggle from '../../components/layout/ThemeToggle';
 import { useAuth } from '../../context/AuthContext';
 import { Eye, EyeOff } from 'lucide-react'; // Import icons
+import { apiRequest } from '../../services/api.service'; // Import your central service
 
 const SignupPage = () => {
   const navigate = useNavigate();
@@ -58,63 +59,58 @@ const SignupPage = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
-    setLoading(true);
-    setErrors({}); // FIX: Use plural 'setErrors'
+  e.preventDefault();
+  if (!validate()) return;
+  
+  setLoading(true);
+  setErrors({}); 
+  
+  try {
+    // Constructing the payload exactly as your Flask backend expects
+    const payload = {
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone,
+      password: formData.password,
+      role: selectedRole,
+      registrationNumber: formData.registrationNumber
+    };
+
+    // --- [CENTRALIZED BACKEND CONNECTION] ---
+    // This automatically uses https://anna-sampada-v2.onrender.com in production
+    const data = await apiRequest('/api/signup', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
     
-    try {
-      // --- [THIS IS THE CORRECTED BACKEND CONNECTION] ---
-      const payload = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        password: formData.password,
-        role: selectedRole,
-        registrationNumber: formData.registrationNumber
-      };
+    // --- SUCCESS LOGIC ---
+    const userData = {
+      id: data.email,
+      name: formData.name,
+      email: data.email,
+      role: data.role
+    };
+    
+    const verificationStatus = {
+      verified: data.role === 'user', // Instant access for standard users
+      pending: data.role !== 'user'   // Reviewer requirement: NGOs must be verified
+    };
+    
+    // Safety Fix: Store timestamp for the "Login Timeout" security requirement
+    localStorage.setItem('lastLogin', Date.now().toString());
 
-      const response = await fetch('http://localhost:5000/api/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        // This will show "User with this email already exists" from your backend
-        throw new Error(data.error || 'Signup failed');
-      }
-
-      // --- SUCCESS ---
-      const userData = {
-        id: data.email,
-        name: formData.name,
-        email: data.email,
-        role: data.role
-      };
-      
-      const verificationStatus = {
-        verified: data.role === 'user', // Auto-verify users
-        pending: data.role !== 'user' // Set NGOs/Composters to pending
-      };
-      
-      // Update auth context
-      login(userData, data.role, verificationStatus);
-      
-      // Navigate to dashboard
-      navigate(`/${data.role}-dashboard`);
-      // --- [END OF CORRECTED CODE] ---
-      
-    } catch (error) {
-      console.error('Signup error:', error);
-      // FIX: Use plural 'setErrors'
-      setErrors({ email: error.message }); 
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Update auth context and move to dashboard
+    login(userData, data.role, verificationStatus);
+    navigate(`/${data.role}-dashboard`);
+    
+  } catch (error) {
+    console.error('Signup error:', error);
+    // Displaying the specific backend error (e.g., "Email already exists")
+    setErrors({ email: error.message }); 
+  } finally {
+    setLoading(false);
+  }
+};
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-cyan-50 

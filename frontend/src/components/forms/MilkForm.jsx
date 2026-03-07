@@ -14,6 +14,7 @@ import {
 import InputGroup from "../ui/InputGroup";
 import SelectGroup from "../ui/SelectGroup";
 import { milkSmellOptions, milkConsistencyOptions } from "../../constants/foodOptions";
+import { apiRequest } from "../../services/api.service";
 
 export default function MilkForm({
   handleBack,
@@ -86,15 +87,14 @@ export default function MilkForm({
         observed_consistency: formData.observed_consistency,
       };
 
-      const res = await fetch("http://localhost:5000/api/predict_milk", {
+      const data = await apiRequest("/api/predict_milk",{
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Prediction failed.");
+      
       setResult(data);
-    } catch (err) {
+
+    }catch (err) {
       setApiError(err.message);
     } finally {
       setLoading(false);

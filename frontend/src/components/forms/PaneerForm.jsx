@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import SelectGroup from "../ui/SelectGroup";
 import InputGroup from "../ui/InputGroup";
+import { apiRequest } from "../../services/api.service";
+
 
 export default function PaneerForm({
   handleBack,
@@ -81,19 +83,18 @@ export default function PaneerForm({
       const payload = { ...formData };
       if (!isRawPaneer) payload.storage_container_raw = "Not Applicable";
 
-      const res = await fetch("http://localhost:5000/api/predict/paneer", {
+      // Clean, centralized call
+      const data = await apiRequest("/api/predict/paneer", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Prediction failed.");
+      
       setResult(data);
     } catch (err) {
       setApiError(err.message);
     } finally {
       setLoading(false);
+    }
     }
   };
 
@@ -294,4 +295,4 @@ export default function PaneerForm({
       </div>
     </motion.div>
   );
-}
+

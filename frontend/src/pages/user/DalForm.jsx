@@ -17,6 +17,8 @@ import {
   CalendarDays,
   Package,
 } from 'lucide-react';
+import { apiRequest } from '../../services/api.service'; // Import your central service
+
 
 // ==================================================================
 // --- DAL CONSTANTS (from your Streamlit spec) ---
@@ -124,49 +126,52 @@ export const DalForm = ({ handleBack, setResult, setLoading, setApiError, stepVa
 
 
   // --- API Call ---
-  const handlePredict = async () => {
-    setApiError(null);
-    setResult(null);
+// Import the centralized service regardless of file location
 
-    if (!validateForm(true)) {
-        console.log("Final validation failed (Dal)", errors);
-        return;
-    }
+const handlePredict = async () => {
+    setApiError(null);
+    setResult(null);
 
-    setLoading(true);
-    try {
-      const payload = {
-        Time_since_preparation_hours: parseFloat(formData.Time_since_preparation_hours),
-        Storage_place: formData.Storage_place,
-        Acidity_source: formData.Acidity_source,
-        Consistency: formData.Consistency,
-        Container_type: formData.Container_type,
-        Smell: formData.Smell,
-        Oil_separation: parseFloat(formData.Oil_separation),
-      };
+    // Ensure validation passes before hitting the Render backend
+    if (!validateForm(true)) {
+        console.log("Final validation failed (Dal)", errors);
+        return;
+    }
 
-      console.log("Sending Dal Payload:", payload);
+    setLoading(true);
+    try {
+      const payload = {
+        Time_since_preparation_hours: parseFloat(formData.Time_since_preparation_hours),
+        Storage_place: formData.Storage_place,
+        Acidity_source: formData.Acidity_source,
+        Consistency: formData.Consistency,
+        Container_type: formData.Container_type,
+        Smell: formData.Smell,
+        Oil_separation: parseFloat(formData.Oil_separation),
+      };
 
-      const res = await fetch('http://localhost:5000/api/predict_dal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      console.log("Sending Dal Payload to Cloud:", payload);
 
-      const data = await res.json();
-      if (!res.ok) {
-           console.error("API Error Response (Dal):", data);
-           throw new Error(data.error || `Request failed with status ${res.status}`);
-      }
-      setResult(data); // Expects { status, message, is_safe }
+      // --- [CENTRALIZED API CONNECTION] ---
+      // This automatically swaps between localhost and https://anna-sampada-v2.onrender.com
+      const data = await apiRequest('/api/predict_dal', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
 
-    } catch (err) {
-      console.error("Fetch Error (Dal):", err);
-      setApiError(err.message.includes('Failed to fetch') ? 'Cannot connect to the prediction service.' : err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+      // Expects { status, message, is_safe }
+      setResult(data); 
+
+    } catch (err) {
+      console.error("Fetch Error (Dal):", err);
+      // Clean error messaging for the user
+      setApiError(err.message.includes('Failed to fetch') 
+        ? 'Cannot connect to the prediction service. Please check your internet.' 
+        : err.message);
+    } finally {
+      setLoading(false);
+    }
+};
 
   // Determine which fields should be enabled based on previous valid inputs
   const hoursValid = formData.Time_since_preparation_hours.trim() !== '' && !errors.Time_since_preparation_hours;

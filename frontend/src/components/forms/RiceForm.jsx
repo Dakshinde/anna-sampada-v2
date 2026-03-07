@@ -19,6 +19,8 @@ import {
   riceStorageOptions,
   riceCoolingOptions,
 } from "../../constants/foodOptions";
+import { apiRequest } from "../../services/api.service";
+
 
 export default function RiceForm({
   handleBack,
@@ -67,33 +69,36 @@ export default function RiceForm({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handlePredict = async () => {
-    setApiError(null);
-    setResult(null);
-    if (!validateForm(formData)) return;
 
-    setLoading(true);
-    try {
-      const res = await fetch("http://localhost:5000/api/predict", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+
+  const handlePredict = async () => {
+      setApiError(null);
+      setResult(null);
+      if (!validateForm(formData)) return;
+
+      setLoading(true);
+      try {
+        const payload = {
           hours_since_cooking: +formData.hoursSinceCooking,
           initial_hours_at_room_temp: +formData.initialHoursAtRoom,
           observed_smell: formData.observedSmell,
           observed_appearance: formData.observedAppearance,
           storage_location: formData.storageLocation,
           cooling_method: formData.coolingMethod,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Prediction failed.");
-      setResult(data);
-    } catch (err) {
-      setApiError(err.message);
-    } finally {
-      setLoading(false);
-    }
+        };
+
+        // Uses VITE_API_URL in production, localhost in dev
+        const data = await apiRequest("/api/predict", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        
+        setResult(data);
+      } catch (err) {
+        setApiError(err.message);
+      } finally {
+        setLoading(false);
+      }
   };
 
   const hoursValid = formData.hoursSinceCooking && !errors.hoursSinceCooking;

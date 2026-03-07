@@ -4,6 +4,8 @@ import ThemeToggle from '../../components/layout/ThemeToggle';
 import { useAuth } from '../../context/AuthContext';
 import { Eye, EyeOff } from 'lucide-react'; // Import icons
 
+import { apiRequest } from '../../services/api.service'; // Import your central service
+
 const LoginPage = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -38,58 +40,52 @@ const LoginPage = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
-    setLoading(true);
-    setErrors({}); // Clear old errors
+  e.preventDefault();
+  if (!validate()) return;
+  
+  setLoading(true);
+  setErrors({}); 
+  
+  try {
+    // --- [CLEAN CENTRALIZED CONNECTION] ---
+    // The URL logic is now handled inside apiRequest
+    const data = await apiRequest('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: formData.email,
+        password: formData.password
+      })
+    });
+
+    // --- SUCCESS ---
+    const userData = {
+      id: data.email, 
+      name: data.name || 'User', 
+      email: data.email,
+      role: data.role
+    };
     
-    try {
-      // --- [THIS IS THE REAL BACKEND CONNECTION] ---
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const verificationStatus = {
+      verified: data.role === 'user', 
+      pending: data.role !== 'user'
+    };
 
-      const response = await fetch(`${apiUrl}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password
-        })
-      });
+    // Store login timestamp for the Reviewer's "Session Timeout" requirement
+    localStorage.setItem('lastLogin', Date.now().toString());
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        // This will show "Invalid email or password" from your backend
-        throw new Error(data.error || 'Login failed');
-      }
-
-      // --- SUCCESS ---
-      const userData = {
-        id: data.email, // Use email as a unique ID
-        name: data.name || 'User', // Get name from backend (if you add it)
-        email: data.email,
-        role: data.role
-      };
-      
-      const verificationStatus = {
-        verified: data.role === 'user', // Assume users are auto-verified
-        pending: data.role !== 'user'
-      };
-
-      // Update auth context
-      login(userData, data.role, verificationStatus);
-      
-      // Navigate to dashboard
-      navigate(`/${data.role}-dashboard`);
-      // --- [END OF REAL BACKEND CONNECTION] ---
-      
-    } catch (error) {
-      // Set the error message from the backend
-      setErrors({ password: error.message });
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Update auth context
+    login(userData, data.role, verificationStatus);
+    
+    // Navigate to dashboard
+    navigate(`/${data.role}-dashboard`);
+    
+  } catch (error) {
+    // Error handling is cleaner because apiRequest throws the backend error
+    setErrors({ password: error.message });
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-cyan-50 

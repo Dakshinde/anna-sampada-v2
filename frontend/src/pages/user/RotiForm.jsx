@@ -13,6 +13,8 @@ import {
   AlertCircle,
 } from 'lucide-react';
 
+import { apiRequest } from '../../services/api.service'; // Import your central service
+
 // ============================================================
 // ROTI CONSTANTS
 // ============================================================
@@ -161,6 +163,7 @@ export const RotiForm = ({
     setApiError(null);
     setResult(null);
 
+    // Ensure all Roti-specific fields are valid before calling the API
     if (!validateForm(true)) return;
 
     setLoading(true);
@@ -174,31 +177,26 @@ export const RotiForm = ({
         ambient_season: formData.ambient_season,
         observed_texture: formData.observed_texture,
         observed_appearance: formData.observed_appearance,
-};
+      };
 
-
-      const res = await fetch('http://localhost:5000/api/predict_roti', {
+      // --- [CENTRALIZED API CONNECTION] ---
+      // This automatically uses your Render URL in production
+      const data = await apiRequest('/api/predict_roti', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || `Request failed with status ${res.status}`);
-      }
-
       setResult(data);
     } catch (err) {
+      // Clean error messaging for the high-end UI
       const message = err.message.includes('Failed to fetch')
-        ? 'Cannot connect to the prediction service.'
+        ? 'Cannot connect to the prediction service. Please check your internet.'
         : err.message;
       setApiError(message);
     } finally {
       setLoading(false);
     }
-  };
+};
 
   // ============================================================
   // ENABLED FIELD LOGIC

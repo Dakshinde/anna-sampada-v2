@@ -1,6 +1,8 @@
 import React, { useState, useContext } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Loader2, Send, CheckCircle, AlertTriangle, MapPin } from 'lucide-react';
+import { apiRequest } from '../../services/api.service'; // Import your central service
+
 
 // --- This is our static list of NGOs to replace the live map ---
 const staticNgos = [
@@ -29,11 +31,13 @@ const UserNGOConnectPage = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e) => {
+
+const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
+    // Ensure an NGO is selected before attempting to notify
     if (!selectedNgo) {
       setError('Please select an NGO from the list on the right.');
       return;
@@ -42,7 +46,7 @@ const UserNGOConnectPage = () => {
     setLoading(true);
 
     try {
-      // These keys match your app.py notify-ngo endpoint
+      // Constructing the payload exactly as your Flask notify-ngo endpoint expects
       const payload = {
         ngo_name: selectedNgo.name,
         foodDetails: `${formData.foodDetails} (Quantity: ${formData.quantity} kg)`,
@@ -50,18 +54,22 @@ const UserNGOConnectPage = () => {
         donorContact: formData.donorContact,
       };
 
-      const res = await fetch('http://127.0.0.1:5000/api/notify-ngo', {
+      // --- [CENTRALIZED API CONNECTION] ---
+      // This automatically uses your Render URL in production and localhost in dev
+      const data = await apiRequest('/api/notify-ngo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to send notification.');
-
+      // Clear selection and form on success for a premium user experience
       setSuccess(`Notification sent to ${selectedNgo.name}!`);
-      setSelectedNgo(null); // Reset selection
-      setFormData({ foodDetails: '', quantity: '', pickupAddress: '', donorContact: user?.phone || user?.email || '' });
+      setSelectedNgo(null); 
+      setFormData({ 
+        foodDetails: '', 
+        quantity: '', 
+        pickupAddress: formData.pickupAddress, 
+        donorContact: user?.phone || user?.email || '' 
+      });
 
     } catch (err) {
       setError(err.message);

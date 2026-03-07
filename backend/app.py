@@ -15,12 +15,11 @@ import google.genai as genai
 from google import genai
 from google.genai import types
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore,initialize_app
 from dotenv import load_dotenv
 import googlemaps
 import smtplib
 from email.mime.text import MIMEText
-import traceback # You should already have this
 
 # --- 1. INITIALIZATION ---
 load_dotenv() 
@@ -47,16 +46,47 @@ def after_request(response):
     return response
 # --- 2. INITIALIZE SERVICES (FIREBASE & GEMINI) ---
 
-# Initialize Firebase
+
+# Global db variable
 db = None
-try:
-    cred = credentials.Certificate("serviceAccountKey.json") 
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
-    print("--- Firebase Admin SDK initialized successfully ---")
-except Exception as e:
-    print(f"❌ Error initializing Firebase: {e}")
-    db = None
+
+def initialize_firebase():
+    global db
+    # Check if Firebase is already initialized to prevent multiple apps error
+    if not firebase_admin._apps:
+        try:
+            # 1. TRY RENDER CONFIG FIRST (The Environment Variable)
+            firebase_config = os.environ.get('FIREBASE_CONFIG')
+            
+            if firebase_config:
+                cred_dict = json.loads(firebase_config)
+                cred = credentials.Certificate(cred_dict)
+                firebase_admin.initialize_app(cred)
+                # This matches your other success messages
+                print("✅ Firebase Admin SDK connected successfully via Render Env.")
+            
+            # 2. FALLBACK TO LOCAL FILE
+            else:
+                cert_path = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
+                if os.path.exists(cert_path):
+                    cred = credentials.Certificate(cert_path)
+                    firebase_admin.initialize_app(cred)
+                    print("✅ Firebase Admin SDK connected successfully via local JSON.")
+                else:
+                    print("❌ ERROR: No Firebase credentials found (Env or Local)!")
+                    return None
+            
+            return firestore.client()
+            
+        except Exception as e:
+            print(f"❌ Firebase Initialization Failed: {e}")
+            return None
+    else:
+        # If apps already exist, just get the client for the existing app
+        return firestore.client()
+    
+# IMPORTANT: Initialize the database at the global level
+db = initialize_firebase()
 
 # Initialize Gemini
 try:
@@ -573,37 +603,38 @@ def predict_roti():
         return jsonify({'error': 'Roti Model is not loaded.'}), 500
     try:
         data = request.json
-        if not data:
-            return jsonify({'error': 'No input data provided for roti'}), 400
         input_df = pd.DataFrame([data]) 
         prediction = roti_pipeline.predict(input_df)[0]
         probability = roti_pipeline.predict_proba(input_df)[0]
+        
         is_spoiled = (prediction == 1) 
         confidence = probability[1] if is_spoiled else probability[0]
-        if is_spoiled:
-            result = {'status': 'Spoiled', 'message': f'Spoiled - Unsafe to consume. (Confidence: {confidence*100:.2f}%)', 'is_safe': False}
-        else:
-            result = {'status': 'Fresh', 'message': f'Fresh - Safe to consume. (Confidence: {confidence*100:.2f}%)', 'is_safe': True}
-        return jsonify(result)
-    
-        # --- [COPY THIS BLOCK] ---
+        
+        result = {
+            'status': 'Spoiled' if is_spoiled else 'Fresh',
+            'message': f"{'Spoiled' if is_spoiled else 'Fresh'} - ...",
+            'is_safe': not is_spoiled
+        }
+
+        # Log to DB before returning
         if db:
             try:
-                log_data = data.copy() # The raw user input
-                log_data['prediction'] = result # The model's answer
-                log_data['food_type'] = 'Roti' # <-- CHANGE THIS FOR EACH ROUTE
+                log_data = data.copy()
+                log_data['prediction'] = result
+                log_data['food_type'] = 'Roti'
                 log_data['timestamp'] = firestore.SERVER_TIMESTAMP
-                # You can also add: log_data['userId'] = data.get('userId')
-                
                 db.collection('predictions').add(log_data)
             except Exception as e:
-                app.logger.error(f"ML Log Error: {e}") # Log error but don't fail
-        # --- [END OF BLOCK] ---
+                app.logger.error(f"ML Log Error: {e}")
 
+        return jsonify(result) # Now the return is at the end
+    
     except Exception as e:
         app.logger.error(f"Roti Prediction error: {str(e)}")
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
+
+    
 
 
 # --- ADVANCED CHATBOT Endpoint (Final Version) ---
@@ -740,8 +771,10 @@ def chat():
 @app.route('/api/signup', methods=['POST'])
 def signup():
     global db
-    if not db:
-        return jsonify({"error": "Database not initialized"}), 500
+    if db is None:
+        db = initialize_firebase()  # Try one last time to connect
+        if db is None:
+            return jsonify({"error": "Database connection failed"}), 500
         
     data = request.get_json()
     email = data.get('email')
@@ -777,8 +810,10 @@ def signup():
 @app.route('/api/login', methods=['POST'])
 def login():
     global db
-    if not db:
-        return jsonify({"error": "Database not initialized"}), 500
+    if db is None:
+        db = initialize_firebase()  # Try one last time to connect
+        if db is None:
+            return jsonify({"error": "Database connection failed"}), 500
         
     data = request.get_json()
     email = data.get('email')
