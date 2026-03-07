@@ -26,8 +26,18 @@ import traceback # You should already have this
 load_dotenv() 
 warnings.filterwarnings('ignore')
 app = Flask(__name__)
-CORS(app)
 
+# Replace CORS(app) with this:
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+
+# Add this small decorator to handle the "Preflight" requests
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 # --- 2. INITIALIZE SERVICES (FIREBASE & GEMINI) ---
 
 # Initialize Firebase
