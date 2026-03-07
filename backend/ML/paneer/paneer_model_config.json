@@ -1,0 +1,4 @@
+{
+  "model_file": "random_forest_paneer_model.joblib",
+  "columns_file": "paneer_model_columns.json"
+}

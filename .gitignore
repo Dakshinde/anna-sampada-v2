@@ -8,6 +8,12 @@ backend/.venv/
 backend/__pycache__/
 backend/*.pyc
 backend/.env
+backend/ServiceAccountKey.json
+ServiceAccountKey.json
+serviceAccountKey.json
+backend/serviceAccountKey.json
+backend/serviceAccountKey.json
+
 
 # Frontend
 frontend/node_modules/

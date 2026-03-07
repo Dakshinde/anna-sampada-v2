@@ -1,9 +1,12 @@
-Flask
-Flask-Cors
+flask
+flask-cors
 python-dotenv
 google-genai
-numpy
-pandas
-scikit-learn
+firebase-admin
 googlemaps
+joblib
+pandas
+numpy
+scikit-learn
+xgboost 
 gunicorn
