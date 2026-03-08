@@ -1062,7 +1062,11 @@ const PaneerForm = ({ handleBack, setResult, setLoading, setApiError, foodType, 
 
     setLoading(true);
     try {
-      const payload = { ...formData };
+      const payload = { 
+  ...formData, 
+  // ADD THIS LINE: It tells the backend if it's raw or cooked logic
+  is_cooked: !isRawPaneer 
+};
       if (!isRawPaneer) payload.storage_container_raw = "Not Applicable";
 
       // Clean, centralized call
