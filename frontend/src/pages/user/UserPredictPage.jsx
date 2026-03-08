@@ -1077,7 +1077,7 @@ const PaneerForm = ({ handleBack, setResult, setLoading, setApiError, foodType, 
     } finally {
       setLoading(false);
     }
-    }
+  };
   
 
   // Determine which fields should be enabled (Serial Flow)
@@ -1088,8 +1088,8 @@ const PaneerForm = ({ handleBack, setResult, setLoading, setApiError, foodType, 
    const rawContainerValid = !isRawPaneer || (formData.storage_container_raw !== '' && !errors.storage_container_raw);
    const smellValid = formData.observed_smell && storageLocValid && rawContainerValid;
    // const textureValid = formData.texture_surface && smellValid; // Used for submit button
-
-
+    
+  
   return (
     <motion.div
       key="step-paneer"

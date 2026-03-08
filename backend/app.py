@@ -120,8 +120,8 @@ except Exception as e:
     print(f"Error loading Rice Model: {e}")
 
 # --- Milk Model & Scaler ---
-milk_model_path = os.path.join('ML', 'milk', 'xgboost_milk_spoilage_model.joblib')
-milk_scaler_path = os.path.join('ML', 'milk', 'scaler_milk_spoilage.joblib')
+milk_model_path = os.path.join(os.path.dirname(__file__),'ML', 'milk', 'xgboost_milk_spoilage_model.joblib')
+milk_scaler_path = os.path.join(os.path.dirname(__file__),'ML', 'milk', 'scaler_milk_spoilage.joblib')
 try:
     milk_model = joblib.load(milk_model_path)
     milk_scaler = joblib.load(milk_scaler_path)
