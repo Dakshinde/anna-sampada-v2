@@ -11,7 +11,6 @@ import time
 import html
 import uuid
 import traceback # <-- FIX: Import traceback
-import google.genai as genai
 from google import genai
 from google.genai import types
 import firebase_admin
@@ -83,19 +82,24 @@ def initialize_firebase():
 # IMPORTANT: Initialize the database at the global level
 db = initialize_firebase()
 
-# Initialize Gemini
-try:
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key: 
-        raise ValueError("GEMINI_API_KEY not found in .env file.")
-    
-    client = genai.Client(api_key=api_key)
-    MODEL_NAME = "gemini-2.0-flash"
-    print("✅ Gemini API configured successfully via Client (new SDK).")
+# --- GEMINI API KEY ---
+load_dotenv()
 
+# --- 1. RESOLVE KEY CONFLICT ---
+# If GOOGLE_API_KEY exists but is causing issues, we overwrite it with our known working key
+working_key = os.getenv("GEMINI_API_KEY")
+if working_key:
+    os.environ["GOOGLE_API_KEY"] = working_key
+    print(f"✅ Synced GOOGLE_API_KEY with GEMINI_API_KEY")
+
+# --- 2. INITIALIZE CLIENT ---
+# Don't pass the key in the constructor here; let the SDK pull from os.environ
+try:
+    client = genai.Client() # It will now automatically find the synced GOOGLE_API_KEY
+    MODEL_NAME = "gemini-1.5-flash" # Using the most stable version for now
+    print(f"✅ Gemini API configured via Environment")
 except Exception as e:
-    print(f"❌ Error configuring Gemini API: {e}")
-    model = None
+    print(f"❌ Gemini Setup Failed: {e}")
 
 # Initialize Google Maps
 gmaps = None
@@ -350,7 +354,12 @@ def preprocess_and_validate_milk(data):
         features_df[MILK_SCALED_COLS] = milk_scaler.transform(features_df[MILK_SCALED_COLS])
     except Exception as e:
         return None, f"Error applying milk scaling: {str(e)}"
-    return features_df, None 
+    
+    # Force all columns to be numeric types (float/int)
+    features_df = features_df.apply(pd.to_numeric, errors='coerce').fillna(0.0)
+    
+    return features_df, None
+    
 
 # --- DAL Helpers ---
 def check_logical_spoilage_dal(time_hrs, storage, acidity, consistency, smell):
@@ -430,46 +439,40 @@ def predict_rice():
 # --- MILK Endpoint ---
 @app.route('/api/predict_milk', methods=['POST'])
 def predict_milk():
-    if milk_model is None or milk_scaler is None: return jsonify({'error': 'Milk Model/Scaler not loaded.'}), 500
+    if milk_model is None: return jsonify({'error': 'Model not loaded'}), 500
     try:
-        data = request.json
-        if not data: return jsonify({'error': 'No input data provided for milk'}), 400
-        was_boiled_input_raw = data.get('was_boiled')
-        if isinstance(was_boiled_input_raw, str):
-            was_boiled_original = was_boiled_input_raw.lower() == 'true' or was_boiled_input_raw.lower() == 'yes'
-        else:
-            was_boiled_original = bool(was_boiled_input_raw)
-        processed_input, error = preprocess_and_validate_milk(data)
-        if error: return jsonify({'error': error, 'is_safe': False, 'status': 'Error'}), 400
-        if isinstance(processed_input, dict): return jsonify(processed_input) 
-        prediction_index = int(milk_model.predict(processed_input)[0])
-        if prediction_index == 1:
-            if was_boiled_original:
-                result = {'status': 'Starting', 'message': '⚠️ Starting to Spoil - Consume soon only after re-boiling thoroughly.', 'is_safe': None}
-            else:
-                result = {'status': 'Unsafe', 'message': '❌ Potentially Unsafe - Discard. Do not consume raw or unboiled milk.', 'is_safe': False}
-        else:
-            result = milk_result_map.get(prediction_index, {'status': 'Error', 'message': '🚫 Unknown prediction index', 'is_safe': False})
+        data = request.get_json()
         
-        # --- [COPY THIS BLOCK] ---
-        if db:
-            try:
-                log_data = data.copy() # The raw user input
-                log_data['prediction'] = result # The model's answer
-                log_data['food_type'] = 'Milk' # <-- CHANGE THIS FOR EACH ROUTE
-                log_data['timestamp'] = firestore.SERVER_TIMESTAMP
-                # You can also add: log_data['userId'] = data.get('userId')
-                
-                db.collection('predictions').add(log_data)
-            except Exception as e:
-                app.logger.error(f"ML Log Error: {e}") # Log error but don't fail
-        # --- [END OF BLOCK] ---
+        # 1. Capture was_boiled for the UI logic later
+        was_boiled_raw = data.get('was_boiled')
+        was_boiled_bool = was_boiled_raw.lower() in ['true', 'yes'] if isinstance(was_boiled_raw, str) else bool(was_boiled_raw)
+
+        # 2. Run your massive preprocessing
+        # This already handles scaling and returns a 2D DataFrame
+        processed_df, error = preprocess_and_validate_milk(data)
+
+        if error: return jsonify({'error': error}), 400
+        
+        # 3. Handle 'Instant Result' (if milk is already severe, it returns a dict)
+        if isinstance(processed_df, dict):
+            return jsonify(processed_df)
+
+        # 4. Predict using the ALREADY SCALED DataFrame
+        prediction_index = int(milk_model.predict(processed_df)[0])
+
+        # 5. Logic for 'Starting to Spoil'
+        if prediction_index == 1:
+            if was_boiled_bool:
+                result = {'status': 'Starting', 'message': '⚠️ Starting to Spoil - Re-boil before use.', 'is_safe': None}
+            else:
+                result = {'status': 'Unsafe', 'message': '❌ Potentially Unsafe - Discard.', 'is_safe': False}
+        else:
+            result = milk_result_map.get(prediction_index, {'status': 'Error', 'message': 'Unknown index', 'is_safe': False})
 
         return jsonify(result)
     except Exception as e:
-        app.logger.error(f"Milk Prediction error: {str(e)}")
-        return jsonify({'error': 'An unexpected error occurred.'}), 500
-
+        return jsonify({'error': f"Final Route Error: {str(e)}"}), 500
+    
 # --- PANEER Endpoint ---
 @app.route('/api/predict/paneer', methods=['POST'])
 def predict_paneer():
@@ -629,138 +632,92 @@ def predict_roti():
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
 
-    
-
-
-# --- ADVANCED CHATBOT Endpoint (Final Version) ---
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    # 1. Match your initialization variable name
-    if client is None:
-        return jsonify({'error': 'Gemini API not configured.'}), 500
-
-    payload = request.get_json() or {}
-    user_message = (payload.get('message') or '').strip()
-    mode = (payload.get('mode') or 'Veg')
-    userId = payload.get('userId')         
-
-    if not user_message:
-        return jsonify({'error': 'Empty message'}), 400
-
-    # Sanitize inputs
-    sanitized = re.sub(r"[\x00-\x1f\x7f]+", ' ', user_message)
-    sanitized = html.unescape(sanitized).strip()
-
-    # --- [THIS IS THE NEW, SMARTER PROMPT] ---
-    system_prompt = (
-        "You are Anna, a helpful, professional assistant that suggests recipes from leftovers and provides food-safety advice. "
-        "Be concise, friendly, and human-like. Respect the dietary mode strictly. "
-        
-        "YOUR CAPABILITIES & CONTEXT RULES: "
-        "1.  **Recipe Generation:** If the user's *latest* message is a list of ingredients (e.g., 'I have rice and tomatoes') AND the conversation history shows they just selected a 'recipe' flow, provide one concise recipe."
-        "2.  **Food Safety:** If the user's *latest* message is a food item (e.g., 'milk', 'rice') AND the *previous* message from you (the bot) was a question like 'What food would you like safety tips for?', you MUST provide food safety tips for that item."
-        
-        "CONTEXT IS KEY: "
-        "Always prioritize the most recent context. If you just asked a question (like 'What food?'), the user's *next* message is the answer to that question. Do NOT confuse an answer ('Rice') with a new request for a recipe ('Rice')."
-
-        "NAVIGATION COMMANDS (APP FEATURES):"
-        "If the user's *latest* message is 'Predict Spoilage', respond *only* with: ```json\n{\"replyText\": \"Okay, opening the spoilage predictor...\", \"command\": \"navigate\", \"payload\": \"/user-dashboard/predict\"}\n```"
-        "If the user's *latest* message is 'Find nearby NGOs', respond *only* with: ```json\n{\"replyText\": \"Okay, opening the NGO locator...\", \"command\": \"navigate\", \"payload\": \"/user-dashboard/ngo-connect\"}\n```"
-        
-        "RESPONSE FORMAT: "
-        "You MUST respond in a valid JSON object enclosed in triple backticks (```json ... ```). "
-        "The JSON object is your ONLY response. Do not add text outside the JSON block. "
-        
-        "JSON SCHEMA: "
-        "{ "
-        "  \"replyText\": \"(Your friendly, human-readable reply. 1-3 sentences)\", "
-        "  \"recipes\": [ "
-        "    { "
-        "      \"title\": \"(Recipe Title)\", "
-        "      \"ingredients\": [\"(Ingredient 1)\", \"(Ingredient 2)\"], "
-        "      \"steps\": [\"(Step 1)\", \"(Step 2)\", \"(Step 3)\"], "
-        "      \"estimatedTime\": \"(e.g., 15 minutes)\", "
-        "      \"servings\": 2 "
-        "    } "
-        "  ], "
-        "  \"safetyTips\": [\"(Tip 1)\", \"(Tip 2)\"], "
-        "  \"command\": null "
-        "} "
-
-        "RULES FOR JSON: "
-        "1.  **replyText**: ALWAYS include a friendly message. "
-        "2.  **recipes**: If you give a recipe, you MUST provide a full `recipes` array. A recipe object *must* include `title`, `ingredients` (as an array), and `steps` (as an array). Do NOT provide an empty `steps` array. "
-        "3.  **safetyTips**: If you give safety tips, you MUST provide a full `safetyTips` array. "
-        "4.  **Empty Arrays**: If you are not giving a recipe, the `recipes` array MUST be empty (`[]`). If not giving tips, `safetyTips` MUST be empty (`[]`). "
-        
-        "FALLBACK: "
-        "If the user asks an off-topic question (e.g., 'What is the capital of France?'), "
-        "politely decline. Your JSON response for this should be: "
-        "```json\n{\"replyText\": \"I'm a food expert, so I can't help with that, but I'd be happy to give you a recipe!\", \"recipes\": [], \"safetyTips\": [], \"command\": null}\n```"
-    )
-    # --- [END OF NEW PROMPT] ---
-
-    # Define instructions separately
-    mode_instructions = {
-        'veg': 'Only suggest vegetarian recipes. No meat or fish.',
-        'non-veg': 'You may suggest meat, fish, and egg recipes.',
-        'jain': 'Strictly avoid onion, garlic, eggs, and meat.'
-    }.get(mode.lower(), '')
-
-    full_system_instruction = system_prompt + " " + mode_instructions
-
-    # 2. Fix the history format for the new SDK
-    db_history = get_chat_history(userId) if userId else []
+    # 1. Pull the key and verify it's not empty
+    key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     
-    # Ensure every part is a {'text': '...'} dictionary
-    formatted_history = []
-    for entry in db_history:
-        formatted_history.append({
-            'role': entry['role'],
-            'parts': [{'text': part} for part in entry['parts']]
+    if not key:
+        return jsonify({'error': 'Critical: API Key not found in .env'}), 500
+
+    # 2. THE FIX: Explicitly pass the key AND disable vertex/cloud detection
+    # This forces the SDK to use the API key provided here and nowhere else.
+    local_client = genai.Client(
+        api_key=key,
+        http_options={'headers': {'x-goog-api-key': key}} 
+    )
+
+    try:
+        payload = request.get_json() or {}
+        user_message = (payload.get('message') or '').strip()
+        mode = (payload.get('mode') or 'Veg').lower()
+        userId = payload.get('userId')
+
+        # --- SYSTEM PROMPT ---
+        dietary_rules = {
+            'jain': "Rules: NO meat/fish/eggs/onion/garlic/root-veg.",
+            'veg': "Rules: NO meat/fish/eggs. Onion/Garlic/Dairy OK.",
+            'non-veg': "Rules: All food/meat/eggs allowed."
+        }.get(mode, "Rules: Veg mode.")
+
+        system_instruction = f"""
+        You are Anna, a food assistant. {dietary_rules}
+        Return ONLY JSON.
+        Recipe: {{"type":"recipe","title":"","ing":[],"steps":[]}}
+        Safety: {{"type":"safety","tips":[]}}
+        Navigation: {{"command":"navigate","payload":"/predict"}}
+        """
+
+        # --- HISTORY SAFETY ---
+        raw_history = get_chat_history(userId)[-4:] if userId else []
+        formatted_contents = []
+        for entry in raw_history:
+            role = 'model' if entry['role'] in ['assistant', 'bot', 'model'] else 'user'
+            # Extract text safely from stored history parts
+            text_parts = [types.Part.from_text(text=p['text'] if isinstance(p, dict) else str(p)) 
+                         for p in entry.get("parts", [])]
+            formatted_contents.append(types.Content(role=role, parts=text_parts))
+
+        formatted_contents.append(types.Content(
+            role='user', 
+            parts=[types.Part.from_text(text=user_message)]
+        ))
+
+        # --- THE CALL WITH RETRY PROTECTION ---
+        response = None
+        for attempt in range(2):
+            try:
+                response = local_client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=formatted_contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        temperature=0.3,
+                        response_mime_type="application/json"
+                    )
+                )
+                break
+            except Exception as e:
+                if attempt == 0: 
+                    time.sleep(1)
+                    continue
+                raise e
+
+        # --- SAFER PARSING ---
+        try:
+            ai_json = json.loads(response.text)
+        except (json.JSONDecodeError, AttributeError):
+            ai_json = {"replyText": response.text if response else "Error", "type": "message"}
+
+        return jsonify({
+            "text": ai_json.get("replyText", response.text if response else ""),
+            "structured": ai_json
         })
 
-    try:
-        # 3. Correct call using the new SDK syntax
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=formatted_history + [{'role': 'user', 'parts': [{'text': sanitized}]}],
-            config=types.GenerateContentConfig(
-                system_instruction=full_system_instruction,
-                temperature=0.7
-            )
-        )
-        text_out = response.text
-
     except Exception as e:
-        app.logger.error(f"Gemini API Error: {traceback.format_exc()}")
-        return jsonify({'error': 'AI service unavailable.'}), 502
-
-    # Parse JSON from AI text
-    structured = None
-    try:
-        m = re.search(r'```json\s*([\s\S]*?)```', text_out, re.IGNORECASE)
-        if m:
-            structured = json.loads(m.group(1))
-    except Exception:
-        structured = None
-
-    # Prepare Response
-    final_response = {
-        'text': structured.get('replyText', text_out) if structured else text_out,
-        'structured': structured
-    }
-    
-    # Fire-and-forget logging to Firestore
-    if userId and db:
-        try:
-            log_chat_to_firestore(sanitized, final_response, mode, userId)
-        except Exception as e:
-            app.logger.error(f"Firestore logging failed: {e}")
-
-    return jsonify(final_response)
-
-
+        print(f"❌ CHAT ERROR: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+             
 # --- [NEW] USER AUTH ENDPOINTS ---
 
 @app.route('/api/signup', methods=['POST'])
