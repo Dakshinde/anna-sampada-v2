@@ -96,7 +96,7 @@ if working_key:
 # Don't pass the key in the constructor here; let the SDK pull from os.environ
 try:
     client = genai.Client() # It will now automatically find the synced GOOGLE_API_KEY
-    MODEL_NAME = "gemini-1.5-flash" # Using the most stable version for now
+    MODEL_NAME = "gemini-2.5-flash" # Using the most stable version for now
     print(f"✅ Gemini API configured via Environment")
 except Exception as e:
     print(f"❌ Gemini Setup Failed: {e}")
@@ -688,7 +688,7 @@ def chat():
         for attempt in range(2):
             try:
                 response = local_client.models.generate_content(
-                    model="gemini-2.0-flash",
+                    model="gemini-2.5-flash",
                     contents=formatted_contents,
                     config=types.GenerateContentConfig(
                         system_instruction=system_instruction,
@@ -702,6 +702,14 @@ def chat():
                     time.sleep(1)
                     continue
                 raise e
+
+        # --- ADD MONITORING HERE ---
+        if response and response.usage_metadata:
+            usage = response.usage_metadata
+            print(f"📊 [GEMINI MONITOR] Tokens -> Prompt: {usage.prompt_token_count} | "
+                  f"Candidates: {usage.candidates_token_count} | "
+                  f"Total: {usage.total_token_count}")
+        # ---------------------------
 
         # --- SAFER PARSING ---
         try:
@@ -717,6 +725,9 @@ def chat():
     except Exception as e:
         print(f"❌ CHAT ERROR: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
+    
+
+
              
 # --- [NEW] USER AUTH ENDPOINTS ---
 
