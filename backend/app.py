@@ -662,10 +662,24 @@ def chat():
 
         system_instruction = f"""
         You are Anna, a food assistant. {dietary_rules}
-        Return ONLY JSON.
-        Recipe: {{"type":"recipe","title":"","ing":[],"steps":[]}}
-        Safety: {{"type":"safety","tips":[]}}
-        Navigation: {{"command":"navigate","payload":"/predict"}}
+        Return ONLY valid JSON.
+        The JSON MUST follow this exact structure:
+        {{
+            "replyText": "Your conversational reply here. Use markdown for text formatting.",
+            "recipes": [
+                {{
+                    "title": "Recipe Name",
+                    "estimatedTime": "15 mins",
+                    "servings": 2,
+                    "ingredients": ["1 cup rice", "1 tsp salt"],
+                    "steps": ["Step 1", "Step 2"]
+                }}
+            ],
+            "safetyTips": ["Tip 1", "Tip 2"],
+            "command": "",
+            "payload": ""
+        }}
+        If there are no recipes or safety tips, return empty arrays.
         """
 
         # --- HISTORY SAFETY ---
@@ -713,7 +727,18 @@ def chat():
 
         # --- SAFER PARSING ---
         try:
-            ai_json = json.loads(response.text)
+            # Strip potential markdown formatting that Gemini might sneak in
+            raw_text = response.text if response else "{}"
+            cleaned_text = raw_text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            elif cleaned_text.startswith("```"):
+                cleaned_text = cleaned_text[3:]
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            cleaned_text = cleaned_text.strip()
+                
+            ai_json = json.loads(cleaned_text)
         except (json.JSONDecodeError, AttributeError):
             ai_json = {"replyText": response.text if response else "Error", "type": "message"}
 
