@@ -14,7 +14,7 @@ import traceback # <-- FIX: Import traceback
 from google import genai
 from google.genai import types
 import firebase_admin
-from firebase_admin import credentials, firestore,initialize_app
+from firebase_admin import credentials, firestore, initialize_app, auth as firebase_auth
 from dotenv import load_dotenv
 import googlemaps
 import smtplib
@@ -804,14 +804,53 @@ def login():
             return jsonify({"error": "Database connection failed"}), 500
         
     data = request.get_json()
+    id_token = data.get('idToken')
     email = data.get('email')
     password = data.get('password')
-
-    if not email or not password:
-        return jsonify({"error": "Email and password are required"}), 400
-
+    
     try:
-        # Find the user by their email (which is the document ID)
+        # 1. NEW GOOGLE SIGN IN PATH
+        if id_token:
+            try:
+                decoded_token = firebase_auth.verify_id_token(id_token)
+                uid = decoded_token['uid']
+                google_email = decoded_token.get('email', email)
+                
+                # Use UID as the document ID for Google users
+                user_doc_ref = db.collection('users').document(uid)
+                user_doc = user_doc_ref.get()
+                
+                if not user_doc.exists:
+                    # First time logging in with Google: create their record lazily
+                    user_doc_ref.set({
+                        'email': google_email,
+                        'role': 'user',  # default role
+                        'provider': 'google',
+                        'created_at': firestore.SERVER_TIMESTAMP
+                    })
+                    return jsonify({
+                        "status": "success",
+                        "email": google_email,
+                        "role": "user"
+                    }), 200
+                else:
+                    # Existing Google user
+                    user_data = user_doc.to_dict()
+                    return jsonify({
+                        "status": "success",
+                        "email": user_data.get('email'),
+                        "role": user_data.get('role', 'user')
+                    }), 200
+                    
+            except Exception as verify_err:
+                app.logger.error(f"Firebase token verification failed: {verify_err}")
+                return jsonify({"error": "Invalid or expired Google authentication token"}), 401
+
+        # 2. LEGACY LOG PATH FOR EXISTING USERS
+        if not email or not password:
+            return jsonify({"error": "Email and password are required"}), 400
+
+        # Find the user by their email (which is the document ID for legacy users)
         user_doc = db.collection('users').document(email).get()
         
         if not user_doc.exists:

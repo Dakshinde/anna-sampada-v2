@@ -8,7 +8,8 @@
 
 An intelligent web application that uses a hybrid AI system—combining specialized Machine Learning models with a Generative AI chatbot—to help users predict food spoilage, get recipes from leftovers, and donate surplus food.
 
-### **Live Demo: [anna-sampada-v1.vercel.app](https://anna-sampada-v1.vercel.app/)** *(Replace with your Vercel link)*
+### **Live Demo (Frontend): [https://annasampada.vercel.app/](https://annasampada.vercel.app/)**
+### **API Server (Backend): [https://anna-sampada-v2.onrender.com](https://anna-sampada-v2.onrender.com)**
 
 ---
 
