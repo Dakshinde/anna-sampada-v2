@@ -760,35 +760,68 @@ def chat():
 def signup():
     global db
     if db is None:
-        db = initialize_firebase()  # Try one last time to connect
+        db = initialize_firebase()
         if db is None:
             return jsonify({"error": "Database connection failed"}), 500
         
     data = request.get_json()
+    id_token = data.get('idToken')
     email = data.get('email')
-    password = data.get('password') # In a real app, you MUST hash this!
-    role = data.get('role', 'user') # e.g., 'user', 'ngo'
-
-    if not email or not password:
-        return jsonify({"error": "Email and password are required"}), 400
+    password = data.get('password')
+    role = data.get('role', 'user')
+    name = data.get('name', '')
+    registration_num = data.get('registrationNumber', '')
 
     try:
+        # 1. NEW GOOGLE SIGN UP PATH
+        if id_token:
+            try:
+                decoded_token = firebase_auth.verify_id_token(id_token)
+                uid = decoded_token['uid']
+                google_email = decoded_token.get('email', email)
+                
+                user_doc_ref = db.collection('users').document(uid)
+                user_doc = user_doc_ref.get()
+                
+                if user_doc.exists:
+                    # They already signed up! Just return success or error.
+                    return jsonify({"error": "User with this Google account already exists. Please log in."}), 400
+                
+                # Create the user record
+                user_doc_ref.set({
+                    'name': name or decoded_token.get('name', ''),
+                    'email': google_email,
+                    'role': role,
+                    'provider': 'google',
+                    'registrationNumber': registration_num,
+                    'created_at': firestore.SERVER_TIMESTAMP
+                })
+                
+                return jsonify({"status": "success", "email": google_email, "role": role}), 201
+            except Exception as verify_err:
+                app.logger.error(f"Firebase token verification failed during signup: {verify_err}")
+                return jsonify({"error": "Invalid or expired Google authentication token"}), 401
+
+        # 2. LEGACY LOG PATH FOR EXISTING SYSTEM (Passwords)
+        if not email or not password:
+            return jsonify({"error": "Email and password are required"}), 400
+
         # Check if user already exists
         user_ref = db.collection('users').where('email', '==', email).get()
         if len(user_ref) > 0:
             return jsonify({"error": "User with this email already exists"}), 400
         
         # Create new user
-        # We use the email as the document ID for easy lookup
         user_doc = db.collection('users').document(email)
         user_doc.set({
+            'name': name,
             'email': email,
-            'password': password, # Again, HASH THIS in a real project
+            'password': password, 
             'role': role,
+            'registrationNumber': registration_num,
             'created_at': firestore.SERVER_TIMESTAMP
         })
         
-        # Return the new user data (without password)
         return jsonify({"status": "success", "email": email, "role": role}), 201
         
     except Exception as e:
