@@ -71,9 +71,9 @@ const LandingPage = () => {
         </div>
         
         <h2 className="text-5xl md:text-7xl font-extrabold mb-6 tracking-tight text-gray-900 dark:text-white max-w-4xl leading-tight">
-          Eliminate Food Waste. <br />
+          Surplus Food <br />
           <span className="bg-gradient-to-r from-green-600 to-teal-500 bg-clip-text text-transparent">
-            Empower Communities.
+            Gets to the Best.
           </span>
         </h2>
 
