@@ -16,47 +16,90 @@ const LoginPage = () => {
     password: ''
   });
   const [errors, setErrors] = useState({});
-  const [showPassword, setShowPassword] = useState(false); // State for password visibility
+  const [showPassword, setShowPassword] = useState(false);
+  const [debounceTimer, setDebounceTimer] = useState(null);
+
+  // Prevent pasting into password fields
+  const preventPasteFor = (fieldName) => (e) => {
+    e.preventDefault();
+    setErrors((prev) => ({
+      ...prev,
+      [fieldName]: 'Pasting is not allowed; please type the password manually.'
+    }));
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
+    
+    // Email-specific handling: debounce and limit localpart
+    if (name === 'email') {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      const atIndex = value.indexOf('@');
+      if (atIndex > 64) {
+        // Prevent localpart from exceeding 64 chars
+        const localpart = value.substring(0, 64);
+        const domain = value.substring(atIndex);
+        setFormData(prev => ({ ...prev, email: localpart + domain }));
+      } else {
+        setFormData(prev => ({ ...prev, [name]: value }));
+      }
+      const timer = setTimeout(() => {
+        if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+      }, 300);
+      setDebounceTimer(timer);
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+      if (errors[name]) {
+        setErrors(prev => ({ ...prev, [name]: '' }));
+      }
     }
   };
 
+  // Announce first error for screen readers
+  const firstError = Object.values(errors)[0] || '';
+
   const validate = () => {
     const newErrors = {};
-    if (!formData.email) {
+    
+    // Email validation
+    if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
+    } else if (formData.email.length > 254) {
+      newErrors.email = 'Email must not exceed 254 characters';
+    } else if (!/^[^@]+@[^@]+\.[^@]+$/.test(formData.email)) {
+      newErrors.email = 'Email format is invalid (must contain @ and domain)';
+    } else {
+      const [localpart] = formData.email.split('@');
+      if (localpart.length > 64) {
+        newErrors.email = 'Email localpart (before @) must not exceed 64 characters';
+      } else if (localpart.length === 0) {
+        newErrors.email = 'Email localpart (before @) cannot be empty';
+      }
     }
+    
+    // Password validation
     if (!formData.password) {
       newErrors.password = 'Password is required';
     }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!validate()) return;
-  
-  setLoading(true);
-  setErrors({}); 
-  
-  try {
-    // --- [CLEAN CENTRALIZED CONNECTION] ---
-    // The URL logic is now handled inside apiRequest
-    const data = await apiRequest('/api/login', {
-      method: 'POST',
-      body: JSON.stringify({
-        email: formData.email,
-        password: formData.password
-      })
-    });
+    e.preventDefault();
+    if (!validate()) return;
+    
+    setLoading(true);
+    setErrors({});
+    try {
+      const data = await apiRequest('/api/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: formData.email.trim(),
+          password: formData.password
+        })
+      });
 
     // --- SUCCESS ---
     const userData = {
@@ -81,56 +124,47 @@ const LoginPage = () => {
     navigate(`/${data.role}-dashboard`);
     
   } catch (error) {
-    // Error handling is cleaner because apiRequest throws the backend error
-    setErrors({ password: error.message });
-  } finally {
-    setLoading(false);
-  }
-};
+      console.error('Login error:', error);
+      setErrors((prev) => ({ ...prev, password: error.message || 'Login failed' }));
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    setErrors({});
+    try {
+      const user = await signInWithGoogle();
+      const idToken = await user.getIdToken();
+      const data = await apiRequest('/api/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          idToken,
+          email: user.email,
+          name: user.displayName
+        })
+      });
 
-const handleGoogleSignIn = async () => {
-  setLoading(true);
-  setErrors({});
-  try {
-    const user = await signInWithGoogle();
-    const idToken = await user.getIdToken();
-    
-    // Send the token to the backend
-    const data = await apiRequest('/api/login', {
-      method: 'POST',
-      body: JSON.stringify({
-        idToken: idToken,
-        email: user.email,     // In case backend needs it for initial setup
-        name: user.displayName // To capture their name
-      })
-    });
-
-    const userData = {
-      id: data.email, 
-      name: data.name || user.displayName || 'User', 
-      email: data.email,
-      role: data.role || 'user'
-    };
-    
-    const verificationStatus = {
-      verified: userData.role === 'user', 
-      pending: userData.role !== 'user'
-    };
-
-    localStorage.setItem('lastLogin', Date.now().toString());
-
-    // Update auth context
-    login(userData, userData.role, verificationStatus);
-    
-    // Navigate to dashboard
-    navigate(`/${userData.role}-dashboard`);
-    
-  } catch (error) {
-    setErrors({ password: 'Google Sign-In failed or was cancelled.' });
-  } finally {
-    setLoading(false);
-  }
-};
+      const userData = {
+        id: data.email,
+        name: data.name || user.displayName || 'User',
+        email: data.email,
+        role: data.role || 'user'
+      };
+      const verificationStatus = {
+        verified: userData.role === 'user',
+        pending: userData.role !== 'user'
+      };
+      localStorage.setItem('lastLogin', Date.now().toString());
+      login(userData, userData.role, verificationStatus);
+      navigate(`/${userData.role}-dashboard`);
+    } catch (error) {
+      console.error('Google Sign-In error:', error);
+      setErrors({ email: error.message || 'Google Sign-In failed or was cancelled.' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-cyan-50 
@@ -156,15 +190,21 @@ const handleGoogleSignIn = async () => {
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div aria-live="polite" className="sr-only">{firstError}</div>
+          
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Email Address
+              Email Address <span className="text-red-500">*</span>
             </label>
             <input
               type="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
+              maxLength={254}
+              autoComplete="email"
+              data-testid="login-email"
+              aria-describedby={errors.email ? 'email-error' : undefined}
               className={`w-full px-4 py-3 rounded-xl border-2 ${
                 errors.email 
                   ? 'border-red-500' 
@@ -172,22 +212,26 @@ const handleGoogleSignIn = async () => {
               } dark:bg-gray-700 dark:text-white focus:outline-none transition-all duration-300`}
               placeholder="you@example.com"
             />
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">Max 64 characters before @, 254 total</p>
             {errors.email && (
-              <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.email}</p>
+              <p id="email-error" className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.email}</p>
             )}
           </div>
           
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Password
+              Password <span className="text-red-500">*</span>
             </label>
-            {/* --- [NEW] SHOW/HIDE PASSWORD FIELD --- */}
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
+                onPaste={preventPasteFor('password')}
+                autoComplete="current-password"
+                data-testid="login-password"
+                aria-describedby={errors.password ? 'password-error' : undefined}
                 className={`w-full px-4 py-3 rounded-xl border-2 ${
                   errors.password 
                     ? 'border-red-500' 
@@ -198,19 +242,22 @@ const handleGoogleSignIn = async () => {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-pressed={showPassword}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
             {errors.password && (
-              <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.password}</p>
+              <p id="password-error" className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.password}</p>
             )}
           </div>
           
           <button
             type="submit"
             disabled={loading}
+            data-testid="login-submit"
             className="w-full py-4 bg-gradient-to-r from-green-600 to-teal-600 
                        text-white rounded-xl hover:from-green-700 hover:to-teal-700 
                        transform hover:scale-105 transition-all duration-300 shadow-lg 
@@ -218,7 +265,7 @@ const handleGoogleSignIn = async () => {
           >
             {loading ? (
               <div className="flex items-center justify-center">
-                <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin mr-2" />
                 Logging in...
               </div>
             ) : (
@@ -249,6 +296,12 @@ const handleGoogleSignIn = async () => {
           Continue with Google
         </button>
         
+        <div className="mt-4 text-center">
+          <Link to="/forgot-password" className="text-sm text-gray-500 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400">
+            Forgot Password?
+          </Link>
+        </div>
+
         <div className="mt-6 text-center">
           <p className="text-gray-600 dark:text-gray-300">
             Don't have an account?{' '}
