@@ -25,7 +25,6 @@ const UserDashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-cyan-50 
                     dark:from-gray-900 dark:via-green-900 dark:to-teal-900 
                     transition-colors duration-500">
-      <ThemeToggle />
       <Navbar links={navLinks} />
       <Routes>
         <Route index element={<UserHomePage />} />

@@ -170,7 +170,9 @@ const LoginPage = () => {
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-cyan-50 
                      dark:from-gray-900 dark:via-green-900 dark:to-teal-900 
                      transition-colors duration-500 flex items-center justify-center px-4">
-      <ThemeToggle />
+      <div className="fixed top-4 right-4 z-50">
+        <ThemeToggle />
+      </div>
       
       <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-md 
                       animate-scale-in">

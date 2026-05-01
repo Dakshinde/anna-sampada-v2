@@ -243,7 +243,9 @@ const SignupPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-cyan-50 dark:from-gray-900 dark:via-green-900 dark:to-teal-900 transition-colors duration-500 flex items-center justify-center px-4 py-12">
-      <ThemeToggle />
+      <div className="fixed top-4 right-4 z-50">
+        <ThemeToggle />
+      </div>
       <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-2xl animate-scale-in">
         <div className="text-center mb-8">
           <div className="inline-block p-4 bg-gradient-to-br from-green-500 to-teal-500 rounded-full mb-4">
