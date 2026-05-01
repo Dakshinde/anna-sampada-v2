@@ -719,6 +719,76 @@ def predict_roti():
         app.logger.error(f"Roti Prediction error: {str(e)}")
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
+# --- IOT Sensory Input Endpoint ---
+@app.route('/api/predict_iot', methods=['POST'])
+def predict_iot():
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No input data provided'}), 400
+        
+        category = data.get('food_category', 'Others')
+        ammonia = float(data.get('ammonia_ppm', 0))
+        methane = float(data.get('methane_ppm', 0)) # Now in ppm
+        temp = float(data.get('temperature', 25))
+        humidity = float(data.get('humidity', 50))
+        
+        status = "Fresh"
+        message = "✅ Fresh - Safe to consume."
+        is_safe = True
+        
+        # 1. Ammonia Logic (MQ-135)
+        # 0-10: Fresh, 10-30: Caution, >30: Spoiled
+        if ammonia > 30:
+            status = "Spoiled"
+            message = f"🚫 Spoiled - High Ammonia ({ammonia} ppm) detected. Protein decay is likely."
+            is_safe = False
+        elif ammonia > 10:
+            status = "Stale"
+            message = f"⚠️ Caution - Moderate Ammonia ({ammonia} ppm). Consume immediately or discard."
+            is_safe = True
+            
+        # 2. Methane Logic (MQ-4)
+        # Baseline is usually very low. > 100 ppm in headspace is a strong indicator of fermentation/anaerobic decay.
+        if methane > 100:
+            status = "Spoiled"
+            message = f"🚫 Spoiled - High Methane ({methane} ppm) detected, indicating anaerobic microbial activity."
+            is_safe = False
+        elif methane > 50 and is_safe: # Only set to Caution if not already Spoiled by Ammonia
+            status = "Stale"
+            message = f"⚠️ Caution - Elevated Methane ({methane} ppm). Check for fermentation smells."
+            is_safe = True
+            
+        # 3. Environmental Logic (High risk conditions)
+        # If conditions are dangerous but gases are still low, give a warning.
+        if temp > 32 and humidity > 75 and status == "Fresh":
+            status = "Caution"
+            message = "⚠️ High Risk - Environment (Heat/Humidity) favors rapid spoilage. Check manually."
+            is_safe = True
+
+        result = {
+            'status': status,
+            'message': message,
+            'is_safe': is_safe
+        }
+        
+        # Log to DB
+        if db:
+            try:
+                log_data = data.copy()
+                log_data['prediction'] = result
+                log_data['food_type'] = f"IoT_{category}"
+                log_data['timestamp'] = firestore.SERVER_TIMESTAMP
+                db.collection('predictions').add(log_data)
+            except Exception as e:
+                app.logger.error(f"IoT Log Error: {e}")
+
+        return jsonify(result)
+        
+    except Exception as e:
+        app.logger.error(f"IoT Prediction error: {str(e)}")
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
+
 
 @app.route('/api/chat', methods=['POST'])
 def chat():

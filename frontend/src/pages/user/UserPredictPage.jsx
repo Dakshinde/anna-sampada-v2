@@ -41,7 +41,7 @@ import { apiRequest } from '../../services/api.service'; // Use the central serv
 // ==================================================================
 
 // Base food types for Step 0 selection
-const foodTypes = ['Cooked Rice', 'Milk', 'Paneer', 'Roti', 'Dal'];
+const foodTypes = ['Cooked Rice', 'Milk', 'Paneer', 'Roti', 'Dal', 'Others (Sensory Input via IoT device)'];
 
 // --- Rice Options ---
 const riceSmellOptions = ['Normal', 'Stale/Slightly Off', 'Sour/Fermented', 'Foul/Musty'];
@@ -249,7 +249,7 @@ export default function App() {
                   setSelectedMilkSubType('');
                   setSelectedPaneerSubType('');
                   // If the chosen food needs no extra subtype questions, advance automatically
-                  if (['Cooked Rice', 'Roti', 'Dal'].includes(v)) {
+                  if (['Cooked Rice', 'Roti', 'Dal', 'Others (Sensory Input via IoT device)'].includes(v)) {
                     // small timeout to allow any controlled state updates to flush before switching step
                     setTimeout(() => setStep(1), 0);
                   }
@@ -357,10 +357,11 @@ export default function App() {
               )}
               {selectedFoodBaseType === 'Roti' && <RotiForm {...formProps} />}
               {selectedFoodBaseType === 'Dal' && <DalForm {...formProps} />}
+              {selectedFoodBaseType === 'Others (Sensory Input via IoT device)' && <IoTForm {...formProps} />}
 
               {/* --- Fallback Form --- */}
               {selectedFoodBaseType &&
-                !['Cooked Rice', 'Roti', 'Dal'].includes(selectedFoodBaseType) &&
+                !['Cooked Rice', 'Milk', 'Paneer', 'Roti', 'Dal', 'Others (Sensory Input via IoT device)'].includes(selectedFoodBaseType) &&
                 !(selectedFoodBaseType === 'Milk' && milkSubTypes.includes(effectiveFoodTypeForRouting)) &&
                 !(selectedFoodBaseType === 'Paneer' && paneerIsCookedOptions.some(opt => opt.value === effectiveFoodTypeForRouting)) && (
                   <UnsupportedFoodForm {...formProps} foodType={selectedFoodBaseType} />
@@ -380,6 +381,163 @@ export default function App() {
     </div>
   </div>
 );
+}
+
+
+// ==================================================================
+// --- IOT SENSORY INPUT FORM ---
+// ==================================================================
+function IoTForm({ handleBack, setResult, setLoading, setApiError, stepVariants, loading }) {
+  const [formData, setFormData] = useState({
+    ammoniaPpm: '',
+    methanePpm: '',
+    temperature: '',
+    humidity: '',
+  });
+  const [errors, setErrors] = useState({});
+
+  const validateForm = useCallback((isSubmitting = false) => {
+    const newErrors = {};
+    const { ammoniaPpm, methanePpm, temperature, humidity } = formData;
+
+    if (isSubmitting || ammoniaPpm !== '') {
+      const val = parseFloat(ammoniaPpm);
+      if (isNaN(val) || val < 0 || val > 1000) newErrors.ammoniaPpm = 'Range: 0 - 1000 ppm';
+      if (isSubmitting && ammoniaPpm === '') newErrors.ammoniaPpm = 'Required.';
+    }
+    if (isSubmitting || methanePpm !== '') {
+      const val = parseFloat(methanePpm);
+      if (isNaN(val) || val < 0 || val > 10000) newErrors.methanePpm = 'Range: 0 - 10000 ppm';
+      if (isSubmitting && methanePpm === '') newErrors.methanePpm = 'Required.';
+    }
+    if (isSubmitting || temperature !== '') {
+      const val = parseFloat(temperature);
+      if (isNaN(val) || val < -20 || val > 80) newErrors.temperature = 'Range: -20°C to 80°C';
+      if (isSubmitting && temperature === '') newErrors.temperature = 'Required.';
+    }
+    if (isSubmitting || humidity !== '') {
+      const val = parseFloat(humidity);
+      if (isNaN(val) || val < 0 || val > 100) newErrors.humidity = 'Range: 0 - 100%';
+      if (isSubmitting && humidity === '') newErrors.humidity = 'Required.';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [formData]);
+
+  // Real-time validation effect
+  useEffect(() => {
+    validateForm(false);
+  }, [formData, validateForm]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handlePredict = async () => {
+    if (!validateForm(true)) return;
+
+    setLoading(true);
+    setApiError(null);
+    setResult(null);
+
+    try {
+      const data = await apiRequest('/api/predict_iot', {
+        method: 'POST',
+        body: JSON.stringify({
+          food_category: 'Others',
+          ammonia_ppm: parseFloat(formData.ammoniaPpm),
+          methane_ppm: parseFloat(formData.methanePpm),
+          temperature: parseFloat(formData.temperature),
+          humidity: parseFloat(formData.humidity),
+        }),
+      });
+
+      setResult(data);
+    } catch (err) {
+      setApiError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      variants={stepVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      className="py-8 space-y-6"
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <InputGroup
+          label="Ammonia Level (NH3 ppm)"
+          name="ammoniaPpm"
+          type="number"
+          value={formData.ammoniaPpm}
+          onChange={handleChange}
+          icon={<Wind className="w-5 h-5 text-gray-400" />}
+          error={errors.ammoniaPpm}
+          placeholder="e.g. 5"
+          helperText="Thresholds: 10 (Caution), 30 (Spoiled)"
+        />
+
+        <InputGroup
+          label="Methane Level (CH4 ppm)"
+          name="methanePpm"
+          type="number"
+          value={formData.methanePpm}
+          onChange={handleChange}
+          icon={<AlertCircle className="w-5 h-5 text-gray-400" />}
+          error={errors.methanePpm}
+          placeholder="e.g. 20"
+          helperText="Thresholds: >100 ppm indicates decay"
+        />
+
+        <InputGroup
+          label="Temperature (°C)"
+          name="temperature"
+          type="number"
+          value={formData.temperature}
+          onChange={handleChange}
+          icon={<Thermometer className="w-5 h-5 text-gray-400" />}
+          error={errors.temperature}
+          placeholder="e.g. 25"
+        />
+
+        <InputGroup
+          label="Humidity (%)"
+          name="humidity"
+          type="number"
+          value={formData.humidity}
+          onChange={handleChange}
+          icon={<Droplets className="w-5 h-5 text-gray-400" />}
+          error={errors.humidity}
+          placeholder="e.g. 60"
+        />
+      </div>
+
+      <div className="flex justify-between items-center mt-10">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="flex items-center gap-2 px-5 py-3 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={handlePredict}
+          disabled={loading || !formData.ammoniaPpm || !formData.methanePpm || !formData.temperature || !formData.humidity}
+          className="flex items-center justify-center gap-2 px-6 py-3 font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transition-all disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed min-w-[180px]"
+        >
+          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Analyze Sensor Data'}
+        </button>
+      </div>
+    </motion.div>
+  );
 }
 
 
