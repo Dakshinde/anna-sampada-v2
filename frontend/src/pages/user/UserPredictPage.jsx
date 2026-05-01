@@ -234,14 +234,21 @@ export default function App() {
                 name="foodBaseType"
                 value={selectedFoodBaseType}
                 onChange={(e) => {
-                  setSelectedFoodBaseType(e.target.value);
+                  const v = e.target.value;
+                  setSelectedFoodBaseType(v);
                   setSelectedMilkSubType('');
                   setSelectedPaneerSubType('');
+                  // If the chosen food needs no extra subtype questions, advance automatically
+                  if (['Cooked Rice', 'Roti', 'Dal'].includes(v)) {
+                    // small timeout to allow any controlled state updates to flush before switching step
+                    setTimeout(() => setStep(1), 0);
+                  }
                 }}
                 icon={<Salad className="w-5 h-5 text-gray-400" />}
                 helperText="Select the main food item."
               >
-                <option value="">Choose a food item...</option>
+                {/* only show placeholder when nothing is selected */}
+                {selectedFoodBaseType === '' && <option value="" disabled hidden>Choose a food item...</option>}
                 {foodTypes.map((f) => (
                   <option key={f} value={f}>{f}</option>
                 ))}
@@ -265,7 +272,7 @@ export default function App() {
                       icon={<Milk className="w-5 h-5 text-gray-400" />}
                       helperText="Specify the type of milk."
                     >
-                      <option value="">Choose milk type...</option>
+                      {selectedMilkSubType === '' && <option value="" disabled hidden>Choose milk type...</option>}
                       {milkSubTypes.map((mt) => (
                         <option key={mt} value={mt}>{mt}</option>
                       ))}
@@ -292,7 +299,7 @@ export default function App() {
                       icon={<Package className="w-5 h-5 text-gray-400" />}
                       helperText="Specify if the paneer is raw or part of a dish."
                     >
-                      <option value="">Choose state...</option>
+                      {selectedPaneerSubType === '' && <option value="" disabled hidden>Choose state...</option>}
                       {paneerIsCookedOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
