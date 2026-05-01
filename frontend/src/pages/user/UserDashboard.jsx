@@ -27,7 +27,6 @@ const UserDashboard = () => {
                     transition-colors duration-500">
       <ThemeToggle />
       <Navbar links={navLinks} />
-      <ChatbotWidget />
       <Routes>
         <Route index element={<UserHomePage />} />
         <Route path="predict" element={<UserPredictPage />} />
