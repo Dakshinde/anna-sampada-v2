@@ -44,6 +44,94 @@ CORS(app, resources={r"/api/*": {
 # Global db variable
 db = None
 
+# --- In-memory cache for composting tips (Pre-populated for stability) ---
+_compost_cache = {
+    "Rice": {
+        "tips": [
+            "Rich in nitrogen, which accelerates the decomposition process.",
+            "Attracts beneficial microbes that help break down organic matter faster.",
+            "Can be added to both traditional and worm composting bins."
+        ],
+        "steps": [
+            "Spread the spoiled rice in a thin layer over your compost pile.",
+            "Cover with 'brown' materials like dry leaves or shredded paper to prevent smell.",
+            "Avoid adding rice that has large amounts of oil or dairy mixed in.",
+            "Turn the compost pile every few days to ensure proper aeration.",
+            "Wait for 2-4 months for the rice to fully break down into nutrient-rich soil."
+        ]
+    },
+    "Milk": {
+        "tips": [
+            "Contains calcium and minerals that enrich the final compost quality.",
+            "Actively boosts the microbial population in the pile.",
+            "Liquid nature helps maintain moisture in dry compost bins."
+        ],
+        "steps": [
+            "Dilute the spoiled milk with equal parts water before adding.",
+            "Pour the mixture into the center of the compost pile.",
+            "Immediately cover with a thick layer of carbon-rich materials (browns).",
+            "Use only in small quantities to avoid attracting pests or creating odor.",
+            "Ensure the pile is well-turned to distribute the liquids evenly."
+        ]
+    },
+    "Paneer": {
+        "tips": [
+            "High protein content provides a significant nitrogen boost.",
+            "Breaks down into rich organic matter that plants love.",
+            "Calcium from the curd strengthens soil structure."
+        ],
+        "steps": [
+            "Crumble the spoiled paneer into small, pea-sized pieces.",
+            "Bury the pieces deep within the 'hot' center of the compost pile.",
+            "Mix thoroughly with dry materials to balance the moisture.",
+            "Add a handful of garden soil or old compost to speed up breakdown.",
+            "Keep the pile covered to prevent attracting rodents or flies."
+        ]
+    },
+    "Roti": {
+        "tips": [
+            "Simple carbohydrate structure makes it very easy to decompose.",
+            "Provides a quick energy source for composting bacteria.",
+            "Lightweight and doesn't affect the pile's texture significantly."
+        ],
+        "steps": [
+            "Tear the spoiled rotis into small strips or pieces.",
+            "Soak them briefly in water if they have become very hard.",
+            "Scatter them across the compost surface and mix them in.",
+            "Cover with a layer of garden waste or dry soil.",
+            "Turn the pile once a week to facilitate aerobic decomposition."
+        ]
+    },
+    "Dal": {
+        "tips": [
+            "Legumes like dal are exceptional nitrogen sources (Greens).",
+            "Helps achieve the ideal Carbon-to-Nitrogen ratio quickly.",
+            "Enriches the soil with essential plant nutrients like phosphorus."
+        ],
+        "steps": [
+            "Drain any excessive oily liquid or spicy gravy if possible.",
+            "Spread the dal evenly over the compost pile surface.",
+            "Cover with a generous layer of dry leaves or straw.",
+            "Mix it into the top 6 inches of the compost to prevent flies.",
+            "Monitor moisture levels; add more dry browns if the dal makes it too soggy."
+        ]
+    },
+    "Cooked Rice": {
+        "tips": [
+            "High in nitrogen, perfect for 'heating up' a slow compost pile.",
+            "Soft texture allows it to break down faster than many other grains.",
+            "Helps maintain the moist environment needed for composting worms."
+        ],
+        "steps": [
+            "Break up any large clumps of rice for faster decomposition.",
+            "Mix it with dry garden waste like twigs or cardboard.",
+            "Bury it at least 4 inches deep to mask any fermentation smells.",
+            "Ensure the compost bin has good drainage for the extra moisture.",
+            "Check back in 3 weeks; it should already be significantly decomposed."
+        ]
+    }
+}
+
 def initialize_firebase():
     global db
     # Check if Firebase is already initialized to prevent multiple apps error
@@ -753,7 +841,85 @@ def chat():
     
 
 
-             
+
+
+# --- COMPOSTING TIP Endpoint (with in-memory cache) ---
+@app.route('/api/compost-tip', methods=['POST'])
+def compost_tip():
+    global _compost_cache
+    data = request.get_json() or {}
+    food_type = (data.get('food_type') or 'food').strip()
+
+    # --- Serve from cache if available (zero AI cost) ---
+    if food_type in _compost_cache:
+        print(f"✅ [COMPOST CACHE HIT] '{food_type}' served from cache.")
+        return jsonify(_compost_cache[food_type])
+
+    key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not key:
+        return jsonify({'error': 'API Key not found'}), 500
+
+    local_client = genai.Client(
+        api_key=key,
+        http_options={'headers': {'x-goog-api-key': key}}
+    )
+
+    try:
+        system_instruction = """You are a composting expert. Respond ONLY with valid JSON.
+Return composting tips for spoiled food in this exact structure:
+{
+    "tips": ["tip1", "tip2", "tip3"],
+    "steps": ["step1", "step2", "step3", "step4", "step5"]
+}
+Rules:
+- tips: exactly 3-4 short bullet points — WHY composting this food is beneficial / key facts
+- steps: exactly 4-5 numbered action steps — HOW to compost this specific food item
+- No full sentences, only concise actionable phrases
+- No prose, no markdown, no text outside the JSON object"""
+
+        prompt = f"Give composting tips and steps for spoiled {food_type}."
+
+        response = local_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[types.Content(role='user', parts=[types.Part.from_text(text=prompt)])],
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.2,
+                response_mime_type="application/json",
+                max_output_tokens=800
+            )
+        )
+
+        if response and response.usage_metadata:
+            usage = response.usage_metadata
+            print(f"🌱 [COMPOST TIP - CACHE MISS] '{food_type}' | "
+                  f"Tokens -> Prompt: {usage.prompt_token_count} | "
+                  f"Output: {usage.candidates_token_count} | Total: {usage.total_token_count}")
+
+        raw_text = response.text if response else "{}"
+        cleaned_text = raw_text.strip()
+        if cleaned_text.startswith("```json"):
+            cleaned_text = cleaned_text[7:]
+        elif cleaned_text.startswith("```"):
+            cleaned_text = cleaned_text[3:]
+        if cleaned_text.endswith("```"):
+            cleaned_text = cleaned_text[:-3]
+        cleaned_text = cleaned_text.strip()
+
+        result = json.loads(cleaned_text)
+
+        # --- Store in cache for all future requests ---
+        _compost_cache[food_type] = result
+        print(f"💾 [COMPOST CACHE SET] '{food_type}' cached. Total cached: {list(_compost_cache.keys())}")
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"❌ COMPOST TIP ERROR: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+
+
 # --- [NEW] USER AUTH ENDPOINTS ---
 
 @app.route('/api/signup', methods=['POST'])

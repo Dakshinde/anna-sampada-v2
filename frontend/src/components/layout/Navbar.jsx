@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Leaf } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import InstallAppButton from '../pwa/InstallAppButton.jsx';
 
@@ -21,12 +22,13 @@ const Navbar = ({ links }) => {
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-16">
           {/* Brand */}
-          <div className="flex items-center">
+          <Link to="/user-dashboard" className="flex items-center gap-2 group">
+            <Leaf className="w-6 h-6 text-green-600 dark:text-green-500 group-hover:scale-110 transition-transform duration-200" />
             <span className="text-2xl font-bold bg-gradient-to-r from-green-600 to-teal-600 
                              dark:from-green-400 dark:to-teal-400 bg-clip-text text-transparent">
               AnnaSampada
             </span>
-          </div>
+          </Link>
 
           {/* Desktop Menu */}
           <div className="hidden md:flex space-x-1">

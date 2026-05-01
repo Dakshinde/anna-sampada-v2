@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RotiForm } from './RotiForm';
 import { DalForm } from './DalForm'; 
@@ -16,6 +16,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ShieldOff,
+  Sprout,
 
   // Icons for Milk
   CalendarDays,
@@ -132,6 +133,15 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState(null);
+
+  // --- Ref for auto-scrolling to result ---
+  const resultRef = useRef(null);
+
+  useEffect(() => {
+    if ((result || apiError) && resultRef.current) {
+      resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [result, apiError]);
 
   // Animation variants
   const stepVariants = {
@@ -362,10 +372,10 @@ export default function App() {
     </div>
 
     {/* --- Output Section --- */}
-    <div className="w-full max-w-2xl mt-8">
+    <div ref={resultRef} className="w-full max-w-2xl mt-8">
       <AnimatePresence>
         {apiError && <ApiErrorCard message={apiError} />}
-        {result && <ResultCard result={result} />}
+        {result && <ResultCard result={result} foodType={selectedFoodBaseType} />}
       </AnimatePresence>
     </div>
   </div>
@@ -1419,24 +1429,50 @@ const ApiErrorCard = ({ message }) => (
   </motion.div>
 );
 
-// --- ResultCard --- (No changes needed)
-const ResultCard = ({ result }) => {
+// --- ResultCard ---
+const ResultCard = ({ result, foodType }) => {
   const { status, message, is_safe } = result;
 
-  const isSafe = is_safe === true;
-  const isUnsafe = is_safe === false;
-   // Handle the 'None' case from backend (Python None -> JS null)
-   const isCaution = is_safe === null || is_safe === undefined;
+  // --- Compost Tip State ---
+  const [compostLoading, setCompostLoading] = useState(false);
+  const [compostData, setCompostData] = useState(null);
+  const [compostError, setCompostError] = useState(null);
 
 
-   const borderColor = isSafe ? 'border-green-500' : isUnsafe ? 'border-red-500' : 'border-yellow-500';
-   const bgColor = isSafe ? 'bg-green-50 dark:bg-green-900/30' : isUnsafe ? 'bg-red-50 dark:bg-red-900/30' : 'bg-yellow-50 dark:bg-yellow-900/30';
-   const iconColor = isSafe ? 'text-green-500' : isUnsafe ? 'text-red-500' : 'text-yellow-500';
-   const titleColor = isSafe ? 'text-green-800 dark:text-green-200' : isUnsafe ? 'text-red-800 dark:text-red-200' : 'text-yellow-800 dark:text-yellow-200';
-   const textColor = isSafe ? 'text-green-700 dark:text-green-300' : isUnsafe ? 'text-red-700 dark:text-red-300' : 'text-yellow-700 dark:text-yellow-300';
 
-   // Choose icon based on is_safe state
-   const Icon = isSafe ? CheckCircle2 : isUnsafe ? ShieldOff : AlertCircle; // AlertCircle for caution/null
+  const isSafe = is_safe === true || is_safe === "true" || is_safe === 1;
+  const isUnsafe = is_safe === false || is_safe === "false" || is_safe === 0 || 
+                  ['Spoiled', 'Molded', 'Unsafe', 'Potentially Unsafe'].includes(status);
+  // Handle the 'None' case from backend (Python None -> JS null)
+  const isCaution = !isSafe && !isUnsafe;
+
+  const borderColor = isSafe ? 'border-green-500' : isUnsafe ? 'border-red-500' : 'border-yellow-500';
+  const bgColor = isSafe ? 'bg-green-50 dark:bg-green-900/30' : isUnsafe ? 'bg-red-50 dark:bg-red-900/30' : 'bg-yellow-50 dark:bg-yellow-900/30';
+  const iconColor = isSafe ? 'text-green-500' : isUnsafe ? 'text-red-500' : 'text-yellow-500';
+  const titleColor = isSafe ? 'text-green-800 dark:text-green-200' : isUnsafe ? 'text-red-800 dark:text-red-200' : 'text-yellow-800 dark:text-yellow-200';
+  const textColor = isSafe ? 'text-green-700 dark:text-green-300' : isUnsafe ? 'text-red-700 dark:text-red-300' : 'text-yellow-700 dark:text-yellow-300';
+
+  // Choose icon based on is_safe state
+  const Icon = isSafe ? CheckCircle2 : isUnsafe ? ShieldOff : AlertCircle;
+
+  // --- Fetch Static Tips (cached on backend) ---
+  const handleAskAnna = async () => {
+    setCompostLoading(true);
+    setCompostError(null);
+    setCompostData(null);
+    try {
+      const data = await apiRequest('/api/compost-tip', {
+        method: 'POST',
+        body: JSON.stringify({ food_type: foodType || 'food' }),
+      });
+      setCompostData(data);
+    } catch (err) {
+      setCompostError("Anna couldn't fetch tips right now. Please try again.");
+    } finally {
+      setCompostLoading(false);
+    }
+  };
+
 
 
   return (
@@ -1453,6 +1489,88 @@ const ResultCard = ({ result }) => {
         {status}
       </h2>
       <p className={`text-md ${textColor}`}>{message}</p>
+
+      {/* --- Ask Anna Composting Button (only for unsafe/spoiled results) --- */}
+      {isUnsafe && (
+        <div className="mt-5">
+          {!compostData && (
+            <button
+              onClick={handleAskAnna}
+              disabled={compostLoading}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+            >
+              {compostLoading ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Anna is thinking...</>
+              ) : (
+                <><Sprout className="w-4 h-4" /> Ask Anna for Composting Tips</>
+              )}
+            </button>
+          )}
+
+          {compostError && (
+            <p className="mt-3 text-sm text-red-600 dark:text-red-400">{compostError}</p>
+          )}
+
+          {/* --- Composting Tips Panel --- */}
+          <AnimatePresence>
+            {compostData && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.4 }}
+                className="mt-5 text-left bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 rounded-xl p-5 overflow-hidden"
+              >
+                {/* Header */}
+                <div className="flex items-center gap-2 mb-4">
+                  <Sprout className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  <h3 className="font-bold text-emerald-800 dark:text-emerald-200 text-base">
+                    Anna's Composting Guide for {foodType}
+                  </h3>
+                </div>
+
+                {/* Why Compost */}
+                {compostData.tips && compostData.tips.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2">Why Compost?</p>
+                    <ul className="space-y-1.5">
+                      {compostData.tips.map((tip, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-emerald-900 dark:text-emerald-100">
+                          <span className="text-emerald-500 mt-0.5 flex-shrink-0">•</span>
+                          <span>{tip}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* How to Compost */}
+                {compostData.steps && compostData.steps.length > 0 && (
+                  <div className="mb-5">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2">How to Compost</p>
+                    <ol className="space-y-1.5">
+                      {compostData.steps.map((step, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-emerald-900 dark:text-emerald-100">
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400 flex-shrink-0 w-4">{i + 1}.</span>
+                          <span>{step}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+
+                <button
+                  onClick={() => { setCompostData(null); setCompostError(null); }}
+                  className="mt-4 text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
+                >
+                  ↩ Hide Tips
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
     </motion.div>
   );
 };
