@@ -1,5 +1,5 @@
 import React from 'react';
-import { Leaf, Heart, Users, Lightbulb } from 'lucide-react';
+import { Leaf, Heart, Users, Lightbulb, Wind } from 'lucide-react';
 
 const teamMembers = [
   { name: 'Daksh Shinde', role: 'Team Member' },
@@ -26,6 +26,12 @@ const values = [
     title: 'Manage It Better',
     description:
       'With the right tools, food can be managed more efficiently — donated before it spoils, composted when needed, and tracked so nothing goes unnoticed.',
+  },
+  {
+    icon: <Wind className="w-8 h-8 text-cyan-500" />,
+    title: 'IoT Digital Nose',
+    description:
+      'We use advanced IoT sensors to detect invisible gas markers like Ammonia and Methane, providing an objective "digital nose" that identifies spoilage before it’s visible.',
   },
 ];
 

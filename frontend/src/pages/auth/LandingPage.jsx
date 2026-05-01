@@ -118,7 +118,7 @@ const LandingPage = () => {
             </div>
             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3 tracking-tight">Multi-Model Spoilage AI</h3>
             <p className="text-gray-600 dark:text-gray-400 leading-relaxed max-w-lg mb-6">
-              Stop guessing. Input your storage conditions for Rice, Milk, Paneer, Roti, or Dal, and let our 5 specialized ML models instantly predict freshness and safety.
+              Stop guessing. Input storage conditions or connect your IoT "Digital Nose" sensors for Rice, Milk, and more, and let our 5 specialized ML models instantly predict safety.
             </p>
             <div className="flex items-center gap-2 text-sm font-semibold text-green-600 dark:text-green-400">
               <ShieldCheck className="w-4 h-4" /> 98% Confidence Rating

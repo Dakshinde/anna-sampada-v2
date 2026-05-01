@@ -77,7 +77,7 @@ const UserHomePage = () => {
             <div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3 tracking-tight">Analyze Food Freshness</h2>
               <p className="text-lg text-gray-600 dark:text-gray-400 max-w-xl mb-8 leading-relaxed">
-                Use our multi-model AI pipeline to assess storage conditions and predict spoilage limits instantly.
+                Use our multi-model AI pipeline or connect IoT "Digital Nose" sensors to assess storage conditions and predict spoilage limits instantly.
               </p>
               
               <div className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors shadow-lg shadow-green-600/20 hover:shadow-green-600/40" aria-hidden>
