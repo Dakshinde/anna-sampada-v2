@@ -946,6 +946,83 @@ def get_ngos():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/get-facilities', methods=['GET'])
+def get_facilities():
+    """
+    Get nearby facilities (NGOs, Old Age Homes, Shelters) based on user location.
+    Query params: lat, lng, type (all|ngo|oldage|shelter)
+    """
+    if not gmaps: 
+        return jsonify({"error": "Google Maps service is not configured"}), 500
+    try:
+        lat = float(request.args.get('lat'))
+        lng = float(request.args.get('lng'))
+        facility_type = request.args.get('type', 'all')  # all|ngo|oldage|shelter
+        
+        if not lat or not lng:
+            return jsonify({"error": "Latitude and longitude are required"}), 400
+
+        facilities_dict = {}  # Use dict to deduplicate by place_id
+        radius = 5000  # 5km radius
+
+        # Define keywords for different facility types
+        keywords = {
+            'ngo': 'NGO OR food bank OR food donation OR charity',
+            'oldage': 'old age home OR senior care OR nursing home OR senior living',
+            'shelter': 'shelter OR homeless shelter OR community center OR soup kitchen'
+        }
+
+        # Determine which types to search for
+        search_types = ['ngo', 'oldage', 'shelter'] if facility_type == 'all' else [facility_type]
+
+        for ftype in search_types:
+            if ftype not in keywords:
+                continue
+            
+            try:
+                places_result = gmaps.places_nearby(
+                    location=(lat, lng), 
+                    radius=radius, 
+                    keyword=keywords[ftype]
+                )
+                
+                for place in places_result.get('results', []):
+                    place_id = place['place_id']
+                    
+                    # If we already have this place, update with new type if it's different
+                    if place_id in facilities_dict:
+                        # Add to types list if not already there
+                        if ftype not in facilities_dict[place_id]['types']:
+                            facilities_dict[place_id]['types'].append(ftype)
+                    else:
+                        # Create new entry
+                        facilities_dict[place_id] = {
+                            "id": place_id, 
+                            "name": place.get('name'), 
+                            "address": place.get('vicinity', 'Address not available'),
+                            "type": ftype,  # Primary type
+                            "types": [ftype],  # All types this place matches
+                            "location": place['geometry']['location'],
+                            "rating": place.get('rating', 'N/A'),
+                            "open_now": place.get('opening_hours', {}).get('open_now'),
+                            "photo_url": f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference={place['photos'][0]['photo_reference']}&key={os.getenv('GOOGLE_MAPS_API_KEY')}" if place.get('photos') else None
+                        }
+            except Exception as e:
+                app.logger.warning(f"Error fetching {ftype}: {e}")
+                continue
+
+        # Convert dict values to list and remove 'types' field for frontend
+        facilities_list = [
+            {k: v for k, v in facility.items() if k != 'types'} 
+            for facility in facilities_dict.values()
+        ]
+
+        return jsonify(facilities_list)
+    except Exception as e:
+        app.logger.error(f"Google Maps Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # In app.py
 @app.route('/api/notify-ngo', methods=['POST'])
 def notify_ngo():

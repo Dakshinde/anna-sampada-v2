@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import InstallAppButton from '../pwa/InstallAppButton.jsx';
 
 const Navbar = ({ links }) => {
   const { logout } = useAuth();
@@ -48,6 +49,9 @@ const Navbar = ({ links }) => {
             >
               Logout
             </button>
+            <div className="pl-2 flex items-center">
+              <InstallAppButton />
+            </div>
           </div>
 
           {/* Mobile Menu Button */}

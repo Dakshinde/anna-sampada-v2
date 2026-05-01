@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Leaf, Handshake, Search, ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
 import ThemeToggle from '../../components/layout/ThemeToggle';
 import Footer from '../../components/layout/Footer';
+import InstallAppButton from '../../components/pwa/InstallAppButton.jsx';
 
 const LandingPage = () => {
   const navigate = useNavigate();
@@ -60,7 +61,10 @@ const LandingPage = () => {
           <Leaf className="w-6 h-6 text-green-600 dark:text-green-500" />
           AnnaSampada
         </h1>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <InstallAppButton />
+          <ThemeToggle />
+        </div>
       </div>
 
       {/* HERO SECTION */}
