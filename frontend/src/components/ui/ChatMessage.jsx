@@ -2,8 +2,8 @@ import React from 'react';
 import { BookOpen, ShieldCheck, Clock, Users, Leaf, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
-export const ChatMessage = ({ message }) => {
-  const { role, text, recipes, safetyTips, isError } = message;
+export const ChatMessage = ({ message, onFollowUpClick }) => {
+  const { role, text, recipes, safetyTips, isError, followUpButtons } = message;
   const isUser = role === 'user';
 
   return (
@@ -37,6 +37,20 @@ export const ChatMessage = ({ message }) => {
           {safetyTips && safetyTips.length > 0 && <SafetyTips tips={safetyTips} />}
           {recipes && recipes.length > 0 && (
             recipes.map((r, i) => <RecipeCard key={i} recipe={r} />)
+          )}
+          {/* Follow-up buttons (hardcoded options) */}
+          {followUpButtons && followUpButtons.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-200/50 dark:border-gray-600/50 flex flex-wrap gap-2">
+              {followUpButtons.map((btn, i) => (
+                <button
+                  key={i}
+                  onClick={() => onFollowUpClick && onFollowUpClick(btn)}
+                  className="text-xs px-3 py-1 rounded-full bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-200 border border-green-100 dark:border-green-800 hover:bg-green-100/80 transition"
+                >
+                  {btn}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 

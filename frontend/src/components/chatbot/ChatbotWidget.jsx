@@ -2,6 +2,7 @@
 import React, { useState, useContext, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, X, Sparkles, Leaf } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import useChatSession from '../../hooks/useChatSession.js'; 
 import ChatMessage from '../ui/ChatMessage.jsx';
 import ChatInput from '../ui/ChatInput.jsx';
@@ -23,6 +24,7 @@ const ChatbotWidget = () => {
     conversationState, toggleChat, sendMessage, 
     handleMenuCommand, selectMode, clearHistory 
   } = useChatSession('veg');
+  const navigate = useNavigate();
   
   const [input, setInput] = useState(''); 
   const bottomRef = useRef(null);
@@ -122,6 +124,23 @@ const ChatbotWidget = () => {
     setInput('');
   };
 
+  // Handle clicks on follow-up buttons rendered inside messages
+  const handleFollowUpClick = (label) => {
+    const l = (label || '').toString().trim();
+    if (!l) return;
+    if (l.toLowerCase() === 'go home' || l.toLowerCase() === 'home') {
+      toggleChat();
+      navigate('/');
+      return;
+    }
+    if (l.toLowerCase() === 'exit' || l.toLowerCase() === 'close') {
+      toggleChat();
+      return;
+    }
+    // Treat as a user message by default
+    sendMessage(l);
+  };
+
   
 
   if (!user) return null;
@@ -201,7 +220,7 @@ const ChatbotWidget = () => {
                 )}
 
                 {messages.map((msg) => (
-                  <ChatMessage key={msg.id} message={msg} />
+                  <ChatMessage key={msg.id} message={msg} onFollowUpClick={(label) => handleFollowUpClick(label)} />
                 ))}
                 
                 {isLoading && <TypingIndicator />}

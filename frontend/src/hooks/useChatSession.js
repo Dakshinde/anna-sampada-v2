@@ -3,12 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { chatbotService } from '../services/chatbot.service.js';
 import { useAuth } from '../context/AuthContext.jsx'; // <-- FIX: Import your useAuth hook
 
-// This is the starting message.
+// This is the starting message and standard follow-up template.
 const initialMessage = {
   id: 'init',
   role: 'model',
-  text: "Hi! I'm Anna. How can I help you today?"
+  text: "Hi! I'm Anna — your kitchen assistant. How can I help you today? You can ask me for recipes, food safety tips, or help with food freshness.",
+  // Provide hardcoded follow-up buttons for initial greeting
+  followUpButtons: [
+    'Show recipes',
+    'Food safety tips',
+    'Analyze food freshness',
+    'Go home',
+    'Exit'
+  ]
 };
+
+// Standard polite follow-up appended after helpful answers
+const standardFollowUp = "Is there anything else I can help you with? Ask me for recipes, food safety tips, or to analyze food freshness — I'm here to help step by step.";
 
 export const useChatSession = (initialMode = 'veg') => {
   const navigate = useNavigate();
@@ -47,16 +58,41 @@ export const useChatSession = (initialMode = 'veg') => {
       setIsOpen(false);
       return;
     }
+    const botText = data.replyText || response.text;
     setMessages(prev => [
       ...prev,
       {
         id: crypto.randomUUID(),
         role: 'model',
-        text: data.replyText || response.text,
+        text: botText,
         recipes: data.recipes || [],
         safetyTips: data.safetyTips || [],
       },
     ]);
+
+    // Append a short polite follow-up after the bot's reply so the conversation feels friendly.
+    // Skip follow-up for navigation commands (handled earlier) or if the bot explicitly includes followUp=false
+    if (data.followUp === undefined || data.followUp !== false) {
+      // Delay slightly so users see the main answer first
+      setTimeout(() => {
+        setMessages(prev => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: 'model',
+            text: standardFollowUp,
+            // Hardcoded follow-up options (user requested)
+            followUpButtons: [
+              'Side dishes',
+              'Storage tips',
+              'Reheating instructions',
+              'Go home',
+              'Exit'
+            ]
+          }
+        ]);
+      }, 700);
+    }
   };
 
   // Handles the Main Menu button clicks
