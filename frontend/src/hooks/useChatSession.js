@@ -25,11 +25,11 @@ export const useChatSession = (initialMode = 'veg') => {
 
   const toggleChat = () => setIsOpen(prev => !prev);
 
-  // This connects your "Talk to Anna" homepage button
+  // This connects both the "Ask Anna" button and the leaf button
   useEffect(() => {
-    const handleOpenChat = () => setIsOpen(true);
-    window.addEventListener('openChatbot', handleOpenChat);
-    return () => window.removeEventListener('openChatbot', handleOpenChat);
+    const handleToggleChat = () => toggleChat();
+    window.addEventListener('toggleChatbot', handleToggleChat);
+    return () => window.removeEventListener('toggleChatbot', handleToggleChat);
   }, []); // Runs once
 
   // Auto-scroll

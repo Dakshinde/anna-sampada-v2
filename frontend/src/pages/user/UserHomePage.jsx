@@ -107,7 +107,7 @@ const UserHomePage = () => {
           </Link>
 
           {/* Anna's Chatbot Block */}
-          <button onClick={() => window.dispatchEvent(new Event('openChatbot'))} className={`md:col-span-4 ${bentoCardClass} text-left flex flex-col justify-center`}>
+          <button onClick={() => window.dispatchEvent(new Event('toggleChatbot'))} className={`md:col-span-4 ${bentoCardClass} text-left flex flex-col justify-center`}>
              <div className="bg-cyan-100 dark:bg-cyan-900/30 w-14 h-14 rounded-2xl flex items-center justify-center mb-6 border border-cyan-200 dark:border-cyan-800/50">
               <MessageSquare className="w-7 h-7 text-cyan-600 dark:text-cyan-400" />
             </div>

@@ -8,7 +8,6 @@ import ChatInput from '../ui/ChatInput.jsx';
 import ModeSelector from '../ui/ModeSelector.jsx';
 import TypingIndicator from '../ui/TypingIndicator.jsx';
 import ChatMenu from '../ui/ChatMenu.jsx';
-import QuickActions from '../ui/QuickActions.jsx';
 import { AuthContext } from '../../context/AuthContext.jsx'; 
 
 const flowVariants = {
@@ -27,6 +26,8 @@ const ChatbotWidget = () => {
   
   const [input, setInput] = useState(''); 
   const bottomRef = useRef(null);
+  const [size, setSize] = useState({ width: null, height: null });
+  const resizingRef = useRef({ active: false, startX: 0, startY: 0, startW: 0, startH: 0 });
 
   // Auto-scroll to bottom whenever messages array changes
   useEffect(() => {
@@ -35,22 +36,100 @@ const ChatbotWidget = () => {
     }
   }, [messages, isLoading]);
 
+  // Initialize size on mount (respect viewport and sensible bounds)
+  useEffect(() => {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const defaultW = Math.min(Math.max(Math.round(vw * 0.45), 360), 720); // between 360 and 720
+    const defaultH = Math.min(Math.max(Math.round(vh * 0.75), 400), Math.round(vh * 0.9));
+    // Try to restore from localStorage
+    try {
+      const saved = JSON.parse(localStorage.getItem('chatbot_size') || 'null');
+      if (saved && saved.width && saved.height) {
+        setSize({ width: saved.width, height: saved.height });
+      } else {
+        setSize({ width: defaultW, height: defaultH });
+      }
+    } catch (e) {
+      setSize({ width: defaultW, height: defaultH });
+    }
+  }, []);
+
+  // Save size
+  useEffect(() => {
+    if (size.width && size.height) {
+      try { localStorage.setItem('chatbot_size', JSON.stringify(size)); } catch (e) {}
+    }
+  }, [size]);
+
+  const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+
+  const startResize = (e, mode = 'corner') => {
+    e.preventDefault();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    resizingRef.current = {
+      active: true,
+      mode,
+      startX: clientX,
+      startY: clientY,
+      startW: size.width,
+      startH: size.height,
+    };
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', stopResize);
+    window.addEventListener('touchmove', onPointerMove, { passive: false });
+    window.addEventListener('touchend', stopResize);
+  };
+
+  const onPointerMove = (e) => {
+    if (!resizingRef.current.active) return;
+    e.preventDefault();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const dx = clientX - resizingRef.current.startX;
+    const dy = clientY - resizingRef.current.startY;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const minW = 320;
+    const maxW = Math.round(vw - 48);
+    const minH = 300;
+    const maxH = Math.round(vh * 0.95);
+    const newW = clamp(
+      resizingRef.current.mode === 'vertical' ? resizingRef.current.startW + dx : resizingRef.current.startW + dx,
+      minW,
+      maxW
+    );
+    const newH = clamp(
+      resizingRef.current.mode === 'horizontal' ? resizingRef.current.startH + dy : resizingRef.current.startH + dy,
+      minH,
+      maxH
+    );
+    setSize({ width: newW, height: newH });
+  };
+
+  const stopResize = () => {
+    resizingRef.current.active = false;
+    window.removeEventListener('mousemove', onPointerMove);
+    window.removeEventListener('mouseup', stopResize);
+    window.removeEventListener('touchmove', onPointerMove);
+    window.removeEventListener('touchend', stopResize);
+  };
+
   const handleSubmit = () => {
     if (!input.trim()) return;
     sendMessage(input); 
     setInput('');
   };
 
-  const handleQuickAction = (text) => {
-    sendMessage(text);
-  };
+  
 
   if (!user) return null;
 
   return (
     <div aria-live="polite">
       {/* Floating Action Button */}
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed md:bottom-6 bottom-4 md:right-6 right-4 z-50">
         <button
           aria-label={isOpen ? 'Close chatbot' : 'Open chatbot'}
           onClick={toggleChat}
@@ -74,7 +153,8 @@ const ChatbotWidget = () => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-            className="fixed bottom-24 right-6 z-50 w-[400px] max-w-[calc(100vw-3rem)] h-[75vh] max-h-[800px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl shadow-2xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] flex flex-col overflow-hidden"
+            className="fixed md:bottom-24 bottom-6 md:right-6 right-4 z-50 max-w-[calc(100vw-1.5rem)] max-h-[95vh] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl shadow-2xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] flex flex-col overflow-hidden"
+            style={{ width: size.width ? `${size.width}px` : undefined, height: size.height ? `${size.height}px` : undefined }}
           >
             {/* Header */}
             <header className="flex items-center justify-between px-5 py-4 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 z-10 sticky top-0">
@@ -146,10 +226,7 @@ const ChatbotWidget = () => {
                     )}
                    </AnimatePresence>
 
-                   {/* Quick Actions Component */}
-                   {!isLoading && conversationState === 'chatting' && (
-                       <QuickActions onActionClick={handleQuickAction} />
-                   )}
+                     {/* Quick Actions removed to prevent overlap on content */}
                 </div>
               </div>
 
@@ -164,6 +241,33 @@ const ChatbotWidget = () => {
               )}
               
             </div>
+
+            {/* Resize hit zones */}
+            <div
+              onMouseDown={(e) => startResize(e, 'vertical')}
+              onTouchStart={(e) => startResize(e, 'vertical')}
+              className="absolute top-0 right-0 w-3 h-full cursor-ew-resize z-20 bg-transparent"
+              aria-hidden
+            />
+            <div
+              onMouseDown={(e) => startResize(e, 'horizontal')}
+              onTouchStart={(e) => startResize(e, 'horizontal')}
+              className="absolute left-0 bottom-0 h-3 w-full cursor-ns-resize z-20 bg-transparent"
+              aria-hidden
+            />
+            <button
+              type="button"
+              onMouseDown={(e) => startResize(e, 'corner')}
+              onTouchStart={(e) => startResize(e, 'corner')}
+              aria-label="Resize chatbot"
+              className="absolute bottom-2 right-2 z-30 flex h-8 w-8 items-center justify-center rounded-xl border border-gray-200/80 bg-white/90 text-gray-400 shadow-lg backdrop-blur-sm cursor-se-resize hover:text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800/90 dark:text-gray-500 dark:hover:text-gray-300"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 21H3V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M3 21L10 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M15 3H21V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
+              </svg>
+            </button>
           </motion.aside>
         )}
       </AnimatePresence>
